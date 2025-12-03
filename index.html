@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trout Area Simulator (Mobile)</title>
+    
+    <!-- Load PyScript -->
+    <link rel="stylesheet" href="https://pyscript.net/releases/2023.05.1/pyscript.css" />
+    <script defer src="https://pyscript.net/releases/2023.05.1/pyscript.js"></script>
+
+    <!-- Simple Mobile CSS -->
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 10px; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { font-size: 1.2rem; text-align: center; color: #333; margin-bottom: 15px; }
+        
+        /* Collapsible Sections */
+        details { margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
+        summary { background: #f8f9fa; padding: 12px; cursor: pointer; font-weight: bold; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+        summary::after { content: '+'; font-size: 1.2em; }
+        details[open] summary::after { content: '-'; }
+        .content { padding: 15px; }
+
+        /* Controls */
+        .control-group { margin-bottom: 12px; }
+        label { display: block; font-size: 0.9rem; margin-bottom: 4px; color: #555; }
+        .input-row { display: flex; align-items: center; gap: 10px; }
+        input[type="range"] { flex-grow: 1; height: 25px; }
+        input[type="number"], select { width: 70px; padding: 8px; border: 1px solid #ccc; border-radius: 6px; text-align: center; }
+        select { width: 100%; }
+
+        /* Buttons */
+        .btn-calc { width: 100%; background: #28a745; color: white; border: none; padding: 15px; font-size: 1rem; font-weight: bold; border-radius: 8px; cursor: pointer; margin-bottom: 15px; }
+        .btn-calc:active { background: #218838; }
+
+        /* Cheat Sheet */
+        #cheat-sheet { background: #e8f5e9; border-left: 5px solid #28a745; padding: 10px; margin-bottom: 15px; font-family: monospace; font-size: 0.9rem; border-radius: 4px; }
+        
+        /* Plot Area */
+        #plot-area { width: 100%; display: flex; justify-content: center; }
+        
+        /* Loading Overlay */
+        #loading { position: fixed; top:0; left:0; width:100%; height:100%; background:white; z-index:999; display:flex; justify-content:center; align-items:center; flex-direction:column; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <div id="loading">
+        <div class="spinner"></div>
+        <p style="margin-top:10px;">Loading Physics Engine...</p>
+    </div>
+
+    <div class="container">
+        <h1>🎣 Trout Area Simulator</h1>
+
+        <!-- Cheat Sheet Output -->
+        <div id="cheat-sheet">Initializing...</div>
+
+        <!-- 1. Gear Setup -->
+        <details open>
+            <summary>🎣 1. GEAR SETUP</summary>
+            <div class="content">
+                <div class="control-group">
+                    <label>Line Type</label>
+                    <select id="w_line">
+                        <option value="Ester" selected>Ester</option>
+                        <option value="PE (Braid)">PE (Braid)</option>
+                        <option value="Fluorocarbon">Fluorocarbon</option>
+                        <option value="Nylon">Nylon</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Leader</label>
+                    <select id="w_leader">
+                        <option value="Fluorocarbon" selected>Fluorocarbon</option>
+                        <option value="Nylon">Nylon</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Lure Model</label>
+                    <select id="w_shape">
+                        <option value="Generic Standard" selected>Generic Standard</option>
+                        <option value="Rodio Craft NOA">Rodio Craft NOA</option>
+                        <option value="Forest MIU">Forest MIU</option>
+                        <option value="Jackall Tearo">Jackall Tearo</option>
+                        <option value="Rodio Craft Jeckyll">Rodio Craft Jeckyll</option>
+                        <option value="Generic Wide (High Lift)">Generic Wide</option>
+                        <option value="Generic Slim (Low Lift)">Generic Slim</option>
+                    </select>
+                </div>
+                <!-- Sliders for Gear -->
+                <div class="control-group">
+                    <label>Lure Weight (g)</label>
+                    <div class="input-row">
+                        <input type="range" id="s_weight" min="0.5" max="5.0" step="0.1" value="1.5" oninput="i_weight.value=this.value">
+                        <input type="number" id="i_weight" value="1.5" step="0.1" oninput="s_weight.value=this.value">
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Line Dia (mm)</label>
+                    <div class="input-row">
+                        <input type="range" id="s_dia" min="0.04" max="0.20" step="0.01" value="0.10" oninput="i_dia.value=this.value">
+                        <input type="number" id="i_dia" value="0.10" step="0.01" oninput="s_dia.value=this.value">
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Reel (cm/turn)</label>
+                    <div class="input-row">
+                        <input type="range" id="s_reel" min="50" max="90" step="1" value="64" oninput="i_reel.value=this.value">
+                        <input type="number" id="i_reel" value="64" step="1" oninput="s_reel.value=this.value">
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- 2. Environment -->
+        <details>
+            <summary>🌊 2. ENVIRONMENT</summary>
+            <div class="content">
+                <div class="control-group">
+                    <label>Cast Distance (m)</label>
+                    <div class="input-row">
+                        <input type="range" id="s_dist" min="10" max="50" step="1" value="20" oninput="i_dist.value=this.value">
+                        <input type="number" id="i_dist" value="20" step="1" oninput="s_dist.value=this.value">
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Target Depth (m)</label>
+                    <div class="input-row">
+                        <input type="range" id="s_target" min="0.5" max="5.0" step="0.1" value="2.0" oninput="i_target.value=this.value">
+                        <input type="number" id="i_target" value="2.0" step="0.1" oninput="s_target.value=this.value">
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Pond Depth (m)</label>
+                    <div class="input-row">
+                        <input type="range" id="s_pond" min="1.5" max="5.0" step="0.5" value="3.0" oninput="i_pond.value=this.value">
+                        <input type="number" id="i_pond" value="3.0" step="0.5" oninput="s_pond.value=this.value">
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- Auto Tune Button -->
+        <button id="btn-auto" class="btn-calc" py-click="run_auto_tune_handler">⚡ CALCULATE BEST ACTION</button>
+
+        <!-- 3. Manual Controls -->
+        <details>
+            <summary>⚙️ 3. MANUAL CONTROLS</summary>
+            <div class="content">
+                <div class="control-group">
+                    <label>Start Reel Depth (m)</label>
+                    <div class="input-row">
+                        <input type="range" id="s_start_d" min="0.5" max="5.0" step="0.1" value="2.5" oninput="i_start_d.value=this.value">
+                        <input type="number" id="i_start_d" value="2.5" step="0.1" oninput="s_start_d.value=this.value">
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Trigger Dist (m)</label>
+                    <div class="input-row">
+                        <input type="range" id="s_trig" min="0" max="40" step="1" value="15" oninput="i_trig.value=this.value">
+                        <input type="number" id="i_trig" value="15" step="1" oninput="s_trig.value=this.value">
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Start Speed (cm/s)</label>
+                    <div class="input-row">
+                        <input type="range" id="s_spd_s" min="20" max="140" step="5" value="70" oninput="i_spd_s.value=this.value">
+                        <input type="number" id="i_spd_s" value="70" step="5" oninput="s_spd_s.value=this.value">
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>End Speed (cm/s)</label>
+                    <div class="input-row">
+                        <input type="range" id="s_spd_e" min="10" max="100" step="5" value="35" oninput="i_spd_e.value=this.value">
+                        <input type="number" id="i_spd_e" value="35" step="5" oninput="s_spd_e.value=this.value">
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>
+                        <input type="checkbox" id="w_rod_dyn"> Dynamic Rod Move?
+                    </label>
+                </div>
+                <div class="control-group">
+                    <label>Rod Start (m)</label>
+                    <div class="input-row">
+                        <input type="range" id="s_rod_s" min="0" max="3.5" step="0.1" value="1.5" oninput="i_rod_s.value=this.value">
+                        <input type="number" id="i_rod_s" value="1.5" step="0.1" oninput="s_rod_s.value=this.value">
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Rod End (m)</label>
+                    <div class="input-row">
+                        <input type="range" id="s_rod_e" min="0" max="3.5" step="0.1" value="0.0" oninput="i_rod_e.value=this.value">
+                        <input type="number" id="i_rod_e" value="0.0" step="0.1" oninput="s_rod_e.value=this.value">
+                    </div>
+                </div>
+                <button class="btn-calc" style="background:#007bff; margin-top:10px;" py-click="update_plot_handler">Update Graph</button>
+            </div>
+        </details>
+
+        <!-- Plot Output -->
+        <div id="plot-area"></div>
+    </div>
+
+    <!-- PYTHON CONFIGURATION -->
+    <py-config>
+        packages = ["matplotlib", "numpy"]
+    </py-config>
+
+    <!-- PYTHON LOGIC -->
+    <py-script>
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import numpy as np
+from js import document, console
+
+# --- 1. PHYSICS ENGINE (Exact Copy of v35) ---
+def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader, 
+                           rod_start, rod_end, rod_dynamic, rod_move_dist,
+                           speed_start, speed_end, decel_dist, 
+                           weight, shape_profile, 
+                           steps=150, bottom_limit=-3.0):
+    
+    PHYSICS = {
+        'gravity_scale': 0.28, 'lift_scale': 0.22, 'drag_scale': 0.04,
+        'buoyancy_scale': 0.05, 'belly_tuning': 0.20, 'leader_lift': 0.015
+    }
+
+    line_props = {
+        "PE (Braid)":    {"sg": 0.97, "cd": 1.6, "belly": 2.2, "color": "green"}, 
+        "Ester":         {"sg": 1.38, "cd": 1.0, "belly": 0.3, "color": "darkorange"},
+        "Nylon":         {"sg": 1.14, "cd": 1.1, "belly": 1.0, "color": "red"}, 
+        "Fluorocarbon":  {"sg": 1.78, "cd": 0.9, "belly": -0.6, "color": "blue"}
+    }
+    leader_props = {"Nylon": 1.10, "Fluorocarbon": 0.92}
+    shape_map = {
+        "Rodio Craft NOA":     {"Cl": 1.5, "Stall": 18, "SinkFactor": 0.7, "AoA_Sens": 1.8},
+        "Forest MIU":          {"Cl": 1.0, "Stall": 28, "SinkFactor": 1.0, "AoA_Sens": 1.0},
+        "Jackall Tearo":       {"Cl": 1.1, "Stall": 25, "SinkFactor": 0.9, "AoA_Sens": 1.1},
+        "Rodio Craft Jeckyll": {"Cl": 0.6, "Stall": 22, "SinkFactor": 1.2, "AoA_Sens": 0.8},
+        "Generic Wide (High Lift)":    {"Cl": 1.4, "Stall": 15, "SinkFactor": 0.6, "AoA_Sens": 1.8},
+        "Generic Standard":            {"Cl": 1.0, "Stall": 25, "SinkFactor": 1.0, "AoA_Sens": 1.0},
+        "Generic Slim (Low Lift)":     {"Cl": 0.5, "Stall": 35, "SinkFactor": 1.3, "AoA_Sens": 0.5},
+    }
+    
+    props = line_props[line]
+    l_mod = leader_props[leader]
+    spoon_data = shape_map[shape_profile]
+    spoon_cl = spoon_data["Cl"]
+    stall_threshold = spoon_data["Stall"]
+    sink_factor = spoon_data["SinkFactor"]
+    aoa_sensitivity = spoon_data["AoA_Sens"]
+    
+    x = np.linspace(dist, 0, steps)
+    dx = dist / steps
+    y = []
+    speeds = []
+    rod_heights = []
+    is_stalled = [] 
+    initial_geometry = {} 
+    
+    current_depth = -abs(actual_start_depth)
+    term_velocity = PHYSICS['gravity_scale'] * np.sqrt(weight / 1.5)
+    effective_sink_rate = term_velocity * sink_factor
+    area_lift_scaler = (weight / 1.5) ** 0.7
+    dia_scale_drag = (diameter_mm / 0.10)
+    dia_scale_vol = (diameter_mm / 0.10) ** 2
+
+    for i, d in enumerate(x):
+        if current_depth <= bottom_limit:
+            remaining = steps - i
+            y.extend([bottom_limit] * remaining)
+            speeds.extend([0] * remaining)
+            rod_heights.extend([rod_end if rod_dynamic else rod_start] * remaining)
+            is_stalled.extend([True] * remaining)
+            break
+            
+        if d < 0.2:
+            y.append(0); speeds.append(0); is_stalled.append(True); rod_heights.append(rod_start)
+            continue
+            
+        if rod_dynamic:
+            if d > rod_move_dist: r_h = rod_start
+            else:
+                ratio_rod = 0 if rod_move_dist == 0 else d / rod_move_dist
+                r_h = rod_end + ((rod_start - rod_end) * ratio_rod)
+        else:
+            r_h = rod_start
+        
+        rod_heights.append(r_h)
+
+        total_drop = r_h + abs(current_depth)
+        if total_drop <= 0.001: ratio_air = 0; entry_dist_x = d
+        else:
+            ratio_air = r_h / total_drop
+            entry_dist_x = d * ratio_air
+            
+        ratio_in_water = 1.0 - ratio_air
+        if ratio_in_water < 0: ratio_in_water = 0
+        
+        if i == 0:
+            initial_geometry = {'rod_h': r_h, 'spoon_x': d, 'spoon_y': current_depth, 'entry_x': entry_dist_x}
+
+        if d > decel_dist: v_cms = speed_start
+        else:
+            if decel_dist == 0: ratio = 0
+            else: ratio = d / decel_dist
+            v_cms = speed_end + ((speed_start - speed_end) * ratio)
+        
+        speeds.append(v_cms)
+        v = v_cms / 100.0
+        if v <= 0.01: v = 0.01
+        dt = dx / v 
+        
+        if v_cms < stall_threshold:
+            is_stalled.append(True); cl_effective = spoon_cl * 0.1
+        else:
+            is_stalled.append(False); cl_effective = spoon_cl
+
+        dy = r_h - current_depth
+        geo_angle = np.arctan(dy / d)
+        
+        aoa_factor = 1.0 + (np.sin(geo_angle) * aoa_sensitivity)
+        belly_impact = props['belly'] * (d / 25.0) * PHYSICS['belly_tuning'] * ratio_in_water
+        effective_angle_sin = np.sin(geo_angle) + belly_impact
+        
+        delta_rod = (v * dt) * effective_angle_sin
+        delta_grav = -effective_sink_rate * dt
+        
+        delta_lift = PHYSICS['lift_scale'] * (v**2) * cl_effective * area_lift_scaler * aoa_factor * l_mod * dt
+        delta_line_drag = PHYSICS['drag_scale'] * props['cd'] * (v**2) * dia_scale_drag * (d/25.0) * dt * ratio_in_water
+        delta_buoy = PHYSICS['buoyancy_scale'] * (1.0 - props['sg']) * dia_scale_vol * (d/25.0) * dt * ratio_in_water
+        
+        delta_leader = 0
+        if d < 1.0: 
+            if leader == "Fluorocarbon": delta_leader = -PHYSICS['leader_lift'] * dt
+            else: delta_leader = PHYSICS['leader_lift'] * dt
+        
+        total = delta_rod + delta_grav + delta_lift + delta_line_drag + delta_buoy + delta_leader
+        current_depth += total
+        
+        if current_depth > 0: current_depth = 0
+        y.append(current_depth)
+        
+    return x, y, speeds, is_stalled, props['color'], stall_threshold, initial_geometry, rod_heights
+
+# --- 2. OPTIMIZER ---
+def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line, pond_bottom):
+    best_score = -99999
+    best_params = {}
+
+    profiles = []
+    if weight >= 2.0:
+        if line == "PE (Braid)": profiles = [(80, 50), (70, 40), (60, 30)]
+        else: profiles = [(120, 80), (100, 70), (90, 60)]
+    elif weight >= 1.2:
+        if "Slim" in shape or "Jeckyll" in shape: profiles = [(80, 60), (70, 50), (90, 70)]
+        else: profiles = [(70, 40), (60, 30), (50, 25)]
+    else:
+        if line == "PE (Braid)": profiles = [(40, 15), (30, 15)]
+        else: profiles = [(50, 20), (40, 20), (30, 15)]
+
+    rod_opts = [(1.5, 0.0, True), (0.0, 0.0, False)]
+    start_depths = [target_depth, min(target_depth + 0.5, abs(pond_bottom) - 0.2)]
+
+    for spd_s, spd_e in profiles:
+        for r_s, r_e, r_dyn in rod_opts:
+            for s_depth in start_depths:
+                for trig_pct in [0.6, 0.8]:
+                    trigger_dist = dist * trig_pct
+                    _, y, _, is_stalled, _, _, _, _ = calculate_physics_data(
+                        dist, s_depth, line, diameter, leader,
+                        r_s, r_e, r_dyn, trigger_dist, 
+                        spd_s, spd_e, trigger_dist,
+                        weight, shape,
+                        steps=30, bottom_limit=pond_bottom
+                    )
+                    
+                    min_depth = np.min(y)
+                    if min_depth <= (pond_bottom + 0.1):
+                        score = -5000 
+                    else:
+                        target = -target_depth
+                        tolerance = 0.3 
+                        in_zone = [val for val in y if abs(val - target) <= tolerance]
+                        score = (len(in_zone) / len(y)) * 100
+                        stall_pct = sum(is_stalled) / len(is_stalled)
+                        if stall_pct > 0.05: score -= 200 
+                        score -= (spd_s * 0.01)
+
+                    if score > best_score:
+                        best_score = score
+                        best_params = {
+                            'spd_s': spd_s, 'spd_e': spd_e, 
+                            'rod_s': r_s, 'rod_e': r_e, 'rod_dyn': r_dyn, 
+                            'start_depth': s_depth, 
+                            'trigger_dist': trigger_dist,
+                            'score': score
+                        }
+    return best_params
+
+# --- 3. DOM HELPERS ---
+def get_val(id):
+    el = document.getElementById(id)
+    if el.type == "checkbox": return el.checked
+    if el.type == "number" or el.type == "range": return float(el.value)
+    return el.value
+
+def set_val(id, val):
+    el = document.getElementById(id)
+    # Update both slider and text input if they exist
+    if "s_" in id:
+        document.getElementById(id).value = val
+        document.getElementById(id.replace("s_", "i_")).value = val
+    elif "i_" in id:
+        document.getElementById(id).value = val
+        document.getElementById(id.replace("i_", "s_")).value = val
+    else:
+        el.value = val
+        
+    if el.type == "checkbox": el.checked = val
+
+# --- 4. MAIN PLOT FUNCTION ---
+def update_plot():
+    # Read Values
+    line = get_val("w_line")
+    leader = get_val("w_leader")
+    shape = get_val("w_shape")
+    weight = get_val("s_weight")
+    dia = get_val("s_dia")
+    reel_cm = int(get_val("s_reel"))
+    
+    dist = get_val("s_dist")
+    target_depth = get_val("s_target")
+    pond_depth = get_val("s_pond")
+    
+    start_depth = get_val("s_start_d")
+    trigger = get_val("s_trig")
+    spd_s = get_val("s_spd_s")
+    spd_e = get_val("s_spd_e")
+    rod_dyn = get_val("w_rod_dyn")
+    rod_s = get_val("s_rod_s")
+    rod_e = get_val("s_rod_e")
+    
+    p_bot = -pond_depth
+
+    # Calc
+    x, y, speeds, stalled, color, stall_lim, init_geo, rod_heights = calculate_physics_data(
+        dist, start_depth, line, dia, leader, 
+        rod_s, rod_e, rod_dyn, trigger,
+        spd_s, spd_e, trigger, weight, shape,
+        steps=150, bottom_limit=p_bot
+    )
+
+    # Plot
+    plt.close('all')
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6, 10), gridspec_kw={'height_ratios': [3, 1]})
+    
+    # Adjust Margins
+    plt.subplots_adjust(left=0.12, right=0.98, bottom=0.05, top=0.98)
+
+    # Environment
+    ax1.add_patch(patches.Rectangle((-5, -7), 60, 7, color='deepskyblue', alpha=0.1))
+    ax1.add_patch(patches.Rectangle((0, -target_depth-0.3), dist+4, 0.6, color='limegreen', alpha=0.3, label='Target'))
+    ax1.axhline(0, color='dodgerblue', linewidth=2)
+    ax1.axhline(p_bot, color='sienna', linewidth=3)
+    
+    # Data
+    ax1.plot(x, y, color=color, linewidth=3, label=line)
+    ax1.axvline(trigger, color='purple', linestyle='--', alpha=0.5)
+    
+    # Fisherman
+    ax1.plot([-1.5, -1.5], [0.8, 1.5], 'k', lw=3)
+    ax1.plot([-1.8, -1.5, -1.2], [0, 0.8, 0], 'k', lw=2)
+    ax1.add_patch(patches.Circle((-1.5, 1.75), 0.25, color='k'))
+    ax1.plot([-1.5, 0], [1.0, rod_s], 'k', lw=3)
+    if rod_dyn: ax1.plot([-1.5, 0], [1.0, rod_e], 'gray', ls=':')
+        
+    # Geo
+    if init_geo:
+        ax1.plot([0, init_geo['entry_x']], [init_geo['rod_h'], 0], 'gray', ls='--', lw=1)
+        ax1.plot([init_geo['entry_x'], init_geo['spoon_x']], [0, init_geo['spoon_y']], 'gray', ls='-', lw=1)
+
+    ax1.set_ylim(-4.5, 4.0)
+    ax1.set_xlim(dist+3, -3)
+    ax1.legend(loc='upper left', fontsize='small')
+    ax1.grid(True, alpha=0.5, ls='--')
+    
+    # Bottom Plot
+    ax2.plot(x, speeds, color='purple', lw=2, label="Speed")
+    ax2.axhline(stall_lim, color='red', ls='--', lw=1)
+    ax2.set_ylim(0, 150)
+    ax2.set_yticks([]) # No label text
+    
+    ax3 = ax2.twinx()
+    ax3.plot(x, rod_heights, color='brown', ls='-.', lw=2, label="Rod")
+    ax3.set_ylim(0, 4.0)
+    ax3.set_yticks([]) # No label text
+    
+    ax2.set_xlim(dist+3, -3)
+    ax2.grid(True, alpha=0.3)
+    
+    # Stats
+    cranks_1 = ((dist - trigger) * 100) / reel_cm
+    cranks_2 = (trigger * 100) / reel_cm
+    rod_action = f"Lower Rod -> {rod_e}m" if rod_dyn else f"Hold Rod {rod_s}m"
+    target = -target_depth
+    in_zone = [val for val in y if abs(val - target) <= 0.3]
+    pct = (len(in_zone) / len(y)) * 100
+    
+    # Update Cheat Sheet
+    sheet_html = f"""
+    <div style='background-color:#f8f9fa; padding:8px; border-radius:5px; border:1px solid #ddd; font-family:sans-serif; font-size:12px;'>
+    <b>🎯 Score: {pct:.0f}%</b> (Reel {reel_cm}cm)<br>
+    1. Cast {dist}m. Count down to {start_depth}m.<br>
+    2. <b>Hold Rod {rod_s}m.</b> Reel <b>{cranks_1:.1f} Turns</b> ({int(spd_s)} cm/s)<br>
+    3. <span style='background-color:#ffeb3b'><b>TRIGGER:</b> {rod_action} + Slow ({int(spd_e)} cm/s)</span><br>
+    4. Reel <b>{cranks_2:.1f} Turns</b>
+    </div>
+    """
+    Element("cheat-sheet").element.innerHTML = sheet_html
+    
+    # Render Plot
+    display(fig, target="plot-area", append=False)
+
+def run_auto_tune_handler(*args):
+    # Read values
+    dist = get_val("s_dist")
+    target = get_val("s_target")
+    wt = get_val("s_weight")
+    shape = get_val("w_shape")
+    dia = get_val("s_dia")
+    leader = get_val("w_leader")
+    line = get_val("w_line")
+    pond = -get_val("s_pond")
+    
+    res = optimize_technique(dist, target, wt, shape, dia, leader, line, pond)
+    
+    if res:
+        set_val("s_spd_s", int(res['spd_s']))
+        set_val("s_spd_e", int(res['spd_e']))
+        set_val("s_rod_s", res['rod_s'])
+        set_val("s_rod_e", res['rod_e'])
+        set_val("w_rod_dyn", res['rod_dyn'])
+        set_val("s_start_d", round(res['start_depth'], 1))
+        set_val("s_trig", int(res['trigger_dist']))
+        
+        update_plot_handler(None)
+    else:
+        Element("cheat-sheet").element.innerHTML = "<b>❌ SETUP IMPOSSIBLE. CHANGE GEAR.</b>"
+
+def update_plot_handler(*args):
+    update_plot()
+
+# Initial Load
+document.getElementById("loading").style.display = "none"
+update_plot()
+    </py-script>
+</body>
+</html>
