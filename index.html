@@ -3,57 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trout Area Simulator (Responsive)</title>
+    <title>Trout Area Simulator</title>
     
     <link rel="stylesheet" href="https://pyscript.net/releases/2023.05.1/pyscript.css" />
     <script defer src="https://pyscript.net/releases/2023.05.1/pyscript.js"></script>
 
     <style>
-        :root { --sidebar-width: 380px; --primary: #28a745; }
-        body { margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; background: #f4f6f8; height: 100vh; overflow-x: hidden; }
+        :root { --sidebar-width: 350px; --primary: #28a745; }
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f8; height: 100vh; display: flex; flex-direction: column; }
         
-        /* LAYOUT CONTAINER */
-        .app-container { display: flex; flex-direction: column; height: 100vh; }
+        /* LAYOUT */
+        .app-container { display: flex; flex-direction: column; height: 100%; }
+        .sidebar { background: white; padding: 15px; overflow-y: auto; border-bottom: 1px solid #ddd; flex-shrink: 0; }
+        .main-area { flex: 1; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; align-items: center; }
         
-        /* SIDEBAR (Inputs) */
-        .sidebar { background: white; padding: 20px; box-shadow: 2px 0 10px rgba(0,0,0,0.05); overflow-y: auto; z-index: 10; }
-        
-        /* MAIN CONTENT (Graph) */
-        .main-area { flex: 1; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; overflow-y: auto; }
-        
-        /* DESKTOP LAYOUT (Media Query) */
         @media (min-width: 900px) {
             .app-container { flex-direction: row; }
-            .sidebar { width: var(--sidebar-width); height: 100vh; border-right: 1px solid #ddd; }
-            .main-area { height: 100vh; justify-content: center; }
-            /* Sticky Cheat Sheet on Desktop */
-            #cheat-sheet-container { width: 100%; max-width: 900px; margin-bottom: 20px; }
+            .sidebar { width: var(--sidebar-width); height: 100vh; border-right: 1px solid #ddd; border-bottom: none; }
+            .main-area { padding: 20px; }
         }
 
-        /* WIDGET STYLING */
-        h1 { font-size: 1.2rem; color: #333; margin: 0 0 15px 0; display: flex; align-items: center; gap: 10px; }
-        details { margin-bottom: 12px; border: 1px solid #eee; border-radius: 8px; background: #fff; overflow: hidden; }
-        summary { padding: 12px; cursor: pointer; font-weight: 600; background: #f8f9fa; list-style: none; display: flex; justify-content: space-between; }
+        /* WIDGETS */
+        h1 { font-size: 1.1rem; margin: 0 0 15px 0; color: #333; }
+        details { margin-bottom: 10px; border: 1px solid #eee; border-radius: 8px; overflow: hidden; }
+        summary { background: #f8f9fa; padding: 10px; cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; }
         summary::after { content: '+'; }
         details[open] summary::after { content: '−'; }
-        .content { padding: 15px; }
+        .content { padding: 10px; }
         
-        label { display: block; font-size: 0.85rem; color: #666; margin-bottom: 4px; }
-        .input-row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
-        input[type=range] { flex: 1; cursor: pointer; }
-        input[type=number], select { width: 70px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+        .control-group { margin-bottom: 10px; }
+        label { display: block; font-size: 0.8rem; color: #666; margin-bottom: 3px; }
+        .input-row { display: flex; gap: 8px; align-items: center; }
+        input[type=range] { flex: 1; }
+        input[type=number], select { width: 60px; padding: 5px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; }
         select { width: 100%; }
         
-        /* BUTTONS */
-        .btn-calc { width: 100%; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; transition: background 0.2s; }
+        .btn-calc { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 5px; }
         .btn-calc:hover { background: #218838; }
-        
-        /* PLOT & RESULTS */
-        #plot-area { background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); padding: 10px; width: 100%; max-width: 1000px; }
-        .result-box { background: #e8f5e9; border-left: 5px solid var(--primary); padding: 15px; border-radius: 6px; font-family: monospace; font-size: 0.9rem; line-height: 1.5; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
 
-        /* LOADING */
-        #loader { position: fixed; inset: 0; background: white; z-index: 999; display: flex; justify-content: center; align-items: center; flex-direction: column; }
+        /* RESULTS */
+        #plot-area { background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); padding: 5px; width: 100%; max-width: 800px; }
+        #cheat-sheet { width: 100%; max-width: 800px; margin-bottom: 15px; background: #e8f5e9; border-left: 4px solid var(--primary); padding: 10px; border-radius: 4px; font-family: monospace; font-size: 0.85rem; box-sizing: border-box; }
+
+        /* LOADER */
+        #loader { position: fixed; inset: 0; background: white; z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; }
         .spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
@@ -63,9 +56,9 @@
     <div id="loader"><div class="spinner"></div><p>Loading Physics Engine...</p></div>
 
     <div class="app-container">
-        <!-- SIDEBAR: CONTROLS -->
+        <!-- CONTROLS -->
         <div class="sidebar">
-            <h1>🎣 Trout Simulator</h1>
+            <h1>🎣 Trout Area Simulator</h1>
             
             <details open>
                 <summary>1. GEAR SETUP</summary>
@@ -77,22 +70,24 @@
                         <option value="Fluorocarbon">Fluorocarbon</option>
                         <option value="Nylon">Nylon</option>
                     </select>
-                    <div style="height:10px"></div>
+                    <div style="margin-top:8px"></div>
                     <label>Leader</label>
                     <select id="w_leader">
                         <option value="Fluorocarbon">Fluorocarbon</option>
                         <option value="Nylon">Nylon</option>
                     </select>
-                    <div style="height:10px"></div>
+                    <div style="margin-top:8px"></div>
                     <label>Lure Model</label>
                     <select id="w_shape">
                         <option value="Generic Standard">Generic Standard</option>
                         <option value="Rodio Craft NOA">Rodio Craft NOA</option>
                         <option value="Forest MIU">Forest MIU</option>
+                        <option value="Jackall Tearo">Jackall Tearo</option>
+                        <option value="Rodio Craft Jeckyll">Rodio Craft Jeckyll</option>
                         <option value="Generic Wide (High Lift)">Generic Wide</option>
                         <option value="Generic Slim (Low Lift)">Generic Slim</option>
                     </select>
-                    <div style="height:10px"></div>
+                    <div style="margin-top:8px"></div>
                     <label>Weight (g)</label>
                     <div class="input-row">
                         <input type="range" id="s_weight" min="0.5" max="5.0" step="0.1" value="1.5" oninput="i_weight.value=this.value">
@@ -147,8 +142,8 @@
                         <input type="range" id="s_spd_e" min="10" max="100" step="5" value="35" oninput="i_spd_e.value=this.value">
                         <input type="number" id="i_spd_e" value="35" step="5" oninput="s_spd_e.value=this.value">
                     </div>
-                    <div style="margin: 10px 0;">
-                        <input type="checkbox" id="w_rod_dyn"> <label style="display:inline">Dynamic Rod Move?</label>
+                    <div style="margin: 8px 0; display:flex; align-items:center; gap:5px;">
+                        <input type="checkbox" id="w_rod_dyn"> <label style="margin:0">Dynamic Rod Move?</label>
                     </div>
                     <label>Rod Start (m)</label>
                     <div class="input-row">
@@ -160,38 +155,41 @@
                         <input type="range" id="s_rod_e" min="0" max="3.5" step="0.1" value="0.0" oninput="i_rod_e.value=this.value">
                         <input type="number" id="i_rod_e" value="0.0" step="0.1" oninput="s_rod_e.value=this.value">
                     </div>
+                    <label>Start Reel Depth (m)</label>
+                    <div class="input-row">
+                        <input type="range" id="s_start_d" min="0.5" max="5.0" step="0.1" value="2.5" oninput="i_start_d.value=this.value">
+                        <input type="number" id="i_start_d" value="2.5" step="0.1" oninput="s_start_d.value=this.value">
+                    </div>
                     <label>Trigger Dist (m)</label>
                     <div class="input-row">
                         <input type="range" id="s_trig" min="0" max="40" step="1" value="15" oninput="i_trig.value=this.value">
                         <input type="number" id="i_trig" value="15" step="1" oninput="s_trig.value=this.value">
                     </div>
-                    <button class="btn-calc" style="background:#007bff; margin-top:10px" py-click="update_plot_handler">Update Graph</button>
+                    <button class="btn-calc" style="background:#007bff;" py-click="update_plot_handler">Update Graph</button>
                 </div>
             </details>
         </div>
 
-        <!-- MAIN AREA: PLOT -->
+        <!-- MAIN AREA -->
         <div class="main-area">
-            <div id="cheat-sheet-container">
-                <div id="cheat-sheet" class="result-box">Initializing Planner...</div>
-            </div>
+            <div id="cheat-sheet">Initializing...</div>
             <div id="plot-area"></div>
         </div>
     </div>
 
-    <!-- PYTHON CONFIG -->
+    <!-- CONFIG -->
     <py-config>
         packages = ["matplotlib", "numpy"]
     </py-config>
 
-    <!-- PYTHON LOGIC -->
+    <!-- PYTHON SCRIPT -->
     <py-script>
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
 from js import document, window
 
-# --- PHYSICS CONSTANTS ---
+# --- PHYSICS ENGINE (v31 Validated) ---
 PHYSICS = {
     'gravity_scale': 0.28, 'lift_scale': 0.22, 'drag_scale': 0.04,
     'buoyancy_scale': 0.05, 'belly_tuning': 0.20, 'leader_lift': 0.015
@@ -224,6 +222,7 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
     l_mod = leader_props[leader]
     spoon_data = shape_map[shape_profile]
     spoon_cl = spoon_data["Cl"]
+    stall_threshold = spoon_data["Stall"]
     sink_factor = spoon_data["SinkFactor"]
     aoa_sensitivity = spoon_data["AoA_Sens"]
     
@@ -280,7 +279,6 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
         speeds.append(v_cms)
         v = max(0.01, v_cms / 100.0)
         dt = dx / v 
-        
         cl_effective = spoon_cl
 
         dy = r_h - current_depth
@@ -295,7 +293,6 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
         delta_lift = PHYSICS['lift_scale'] * (v**2) * cl_effective * area_lift_scaler * aoa_factor * l_mod * dt
         delta_line_drag = PHYSICS['drag_scale'] * props['cd'] * (v**2) * dia_scale_drag * (d/25.0) * dt * ratio_in_water
         delta_buoy = PHYSICS['buoyancy_scale'] * (1.0 - props['sg']) * dia_scale_vol * (d/25.0) * dt * ratio_in_water
-        
         delta_leader = 0
         if d < 1.0: 
             if leader == "Fluorocarbon": delta_leader = -PHYSICS['leader_lift'] * dt
@@ -332,7 +329,6 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
                 for trig_pct in [0.6, 0.8]:
                     trigger_dist = dist * trig_pct
                     x, y, _, _, _, _ = calculate_physics_data(dist, s_depth, line, diameter, leader, r_s, r_e, r_dyn, trigger_dist, spd_s, spd_e, trigger_dist, weight, shape, steps=30, bottom_limit=pond_bottom)
-                    
                     min_depth = np.min(y)
                     if min_depth <= (pond_bottom + 0.1): score = -5000 
                     else:
@@ -340,7 +336,7 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
                         tolerance = 0.3 
                         in_zone = [val for val in y if abs(val - target) <= tolerance]
                         score = (len(in_zone) / len(y)) * 100
-                        score -= (spd_s * 0.01) # Prefer slow
+                        score -= (spd_s * 0.01)
 
                     if score > best_score:
                         best_score = score
@@ -367,7 +363,6 @@ def set_val(id, val):
 
 # --- MAIN PLOT ---
 def update_plot():
-    # Read Values
     line = get_val("w_line"); leader = get_val("w_leader"); shape = get_val("w_shape")
     weight = get_val("s_weight"); dia = get_val("s_dia"); reel_cm = int(get_val("s_reel"))
     dist = get_val("s_dist"); target_depth = get_val("s_target"); pond_depth = get_val("s_pond")
@@ -376,37 +371,28 @@ def update_plot():
     rod_dyn = get_val("w_rod_dyn"); rod_s = get_val("s_rod_s"); rod_e = get_val("s_rod_e")
     p_bot = -pond_depth
 
-    # Calc
     x, y, speeds, color, init_geo, rod_heights = calculate_physics_data(
-        dist, start_depth, line, dia, leader, 
-        rod_s, rod_e, rod_dyn, trigger,
-        spd_s, spd_e, trigger, weight, shape,
-        steps=150, bottom_limit=p_bot
+        dist, start_depth, line, dia, leader, rod_s, rod_e, rod_dyn, trigger,
+        spd_s, spd_e, trigger, weight, shape, steps=150, bottom_limit=p_bot
     )
 
-    # Detect Screen Width for Responsive Plotting
-    window_width = window.innerWidth
-    is_mobile = window_width < 900
-    
-    # FIG SIZE: Mobile (Portrait) vs Desktop (Landscape)
+    # Responsive Size
+    is_mobile = window.innerWidth < 900
     fig_size = (5, 9) if is_mobile else (10, 6)
     
     plt.close('all')
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=fig_size, gridspec_kw={'height_ratios': [3, 1]})
     
-    # Adjust margins based on device
-    if is_mobile:
-        plt.subplots_adjust(left=0.15, right=0.98, bottom=0.05, top=0.98)
-    else:
-        plt.subplots_adjust(left=0.08, right=0.95, bottom=0.1, top=0.95)
+    # Adjust Margins
+    left_margin = 0.15 if is_mobile else 0.08 
+    plt.subplots_adjust(left=left_margin, right=0.98, bottom=0.05, top=0.98)
 
     # Env
     ax1.add_patch(patches.Rectangle((-5, -7), 60, 7, color='deepskyblue', alpha=0.1))
-    ax1.add_patch(patches.Rectangle((0, -target_depth-0.3), dist+4, 0.6, color='limegreen', alpha=0.3))
+    ax1.add_patch(patches.Rectangle((0, -target_depth-0.3), dist+4, 0.6, color='limegreen', alpha=0.3, label='Target'))
     ax1.axhline(0, color='dodgerblue', linewidth=2)
     ax1.axhline(p_bot, color='sienna', linewidth=3)
     
-    # Plot Data
     ax1.plot(x, y, color=color, linewidth=3, label=line)
     ax1.axvline(trigger, color='purple', linestyle='--', alpha=0.5)
     
@@ -422,6 +408,8 @@ def update_plot():
         ax1.plot([init_geo['entry_x'], init_geo['spoon_x']], [0, init_geo['spoon_y']], 'gray', ls='-', lw=1)
 
     ax1.set_ylim(-4.5, 4.0); ax1.set_xlim(dist+3, -3)
+    # v35 Clean Axis: Numbers yes, Label no
+    ax1.set_ylabel("") 
     ax1.legend(loc='upper left', fontsize='small')
     ax1.grid(True, alpha=0.5, ls='--')
     
@@ -433,11 +421,7 @@ def update_plot():
     ax3.set_ylim(0, 4.0); ax3.set_yticks([]) 
     ax2.set_xlim(dist+3, -3); ax2.grid(True, alpha=0.3)
     
-    lines_1, labels_1 = ax2.get_legend_handles_labels()
-    lines_2, labels_2 = ax3.get_legend_handles_labels()
-    ax2.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', fontsize='x-small')
-
-    # Update Cheat Sheet
+    # Cheat Sheet
     cranks_1 = ((dist - trigger) * 100) / reel_cm
     cranks_2 = (trigger * 100) / reel_cm
     rod_action = f"Lower to {rod_e}m" if rod_dyn else f"Hold Steady"
@@ -446,7 +430,6 @@ def update_plot():
     pct = (len(in_zone) / len(y)) * 100
     
     sheet_html = f"""
-    <div style='background-color:#e8f5e9; border-left: 5px solid #28a745; padding: 10px; margin-bottom: 15px; font-family: monospace; font-size: 0.9rem; border-radius: 4px;'>
     <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;'>
         <span style='font-weight:bold; font-size:1.1rem'>🎯 Score: {pct:.0f}%</span>
         <span style='color:#666'>Reel: {reel_cm}cm</span>
@@ -458,7 +441,6 @@ def update_plot():
         <b>⚡ TRIGGER:</b> {rod_action} + Slow ({int(spd_e)} cm/s)
     </div>
     4. Reel <b>{cranks_2:.1f}x</b> to finish.
-    </div>
     """
     document.getElementById("cheat-sheet").innerHTML = sheet_html
     display(fig, target="plot-area", append=False)
@@ -483,7 +465,7 @@ def update_plot_handler(*args):
     update_plot()
 
 # Initial Load
-document.getElementById("loading").style.display = "none"
+document.getElementById("loader").style.display = "none"
 update_plot()
     </py-script>
 </body>
