@@ -151,7 +151,6 @@
             </details>
 
             <div class="fab-container">
-                <!-- REMOVED PY-CLICK -->
                 <button id="btn-auto" class="btn-calc">⚡ AUTO-OPTIMIZE PLAN</button>
             </div>
 
@@ -204,7 +203,6 @@
                             <input type="number" id="i_trig" value="15" step="1" oninput="s_trig.value=this.value">
                         </div>
                     </div>
-                    <!-- REMOVED PY-CLICK, ADDED ID -->
                     <button id="btn-update" class="btn-calc" style="background:#007bff;">Update Graph Only</button>
                 </div>
             </details>
@@ -393,10 +391,8 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
                     trigger_dist = dist * trig_pct
                     # Correct unpacking: 7 return values
                     x, y, _, _, _, _, _ = calculate_physics_data(
-                        dist, s_depth, line, diameter, leader, 
-                        r_s, r_e, r_dyn, trigger_dist, 
-                        spd_s, spd_e, trigger_dist, 
-                        weight, shape, 
+                        dist, s_depth, line, diameter, leader, r_s, r_e, r_dyn, trigger_dist, 
+                        spd_s, spd_e, trigger_dist, weight, shape, 
                         steps=30, bottom_limit=pond_bottom
                     )
                     
@@ -490,7 +486,7 @@ def update_plot(event=None):
         lines_2, labels_2 = ax3.get_legend_handles_labels()
         ax2.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', fontsize='x-small')
 
-        # Spoon Attitude
+        # SPOON ATTITUDE QUIVERS
         step = 8
         q_x = x[::step]
         q_y = speeds[::step]
@@ -507,6 +503,7 @@ def update_plot(event=None):
         in_zone = [val for val in y if abs(val - target) <= 0.3]
         pct = (len(in_zone) / len(y)) * 100
         
+        # SAFE STRING CONCATENATION
         sheet_html = '<div style="background-color:#e8f5e9; border-left: 5px solid #28a745; padding: 10px; margin-bottom: 15px; font-family: monospace; font-size: 0.9rem; border-radius: 4px;">'
         sheet_html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">'
         sheet_html += f'<span style="font-weight:bold; font-size:1.1rem">🎯 Score: {pct:.0f}%</span>'
@@ -543,13 +540,42 @@ def run_auto_tune_handler(event=None):
     except Exception as e:
         log_error(e)
 
-# --- BINDINGS ---
-auto_proxy = create_proxy(run_auto_tune_handler)
+# --- BINDING HELPERS ---
 update_proxy = create_proxy(update_plot)
+auto_proxy = create_proxy(run_auto_tune_handler)
 
-document.getElementById("btn-auto").addEventListener("click", auto_proxy)
-document.getElementById("btn-update").addEventListener("click", update_proxy)
+def bind_listeners():
+    # Bind Buttons
+    document.getElementById("btn-auto").addEventListener("click", auto_proxy)
+    document.getElementById("btn-update").addEventListener("click", update_proxy)
+    
+    # Bind Inputs (IDs to watch)
+    input_ids = [
+        "w_line", "w_leader", "w_shape", 
+        "s_weight", "i_weight",
+        "s_dia", "i_dia",
+        "s_reel", "i_reel",
+        "s_dist", "i_dist",
+        "s_target", "i_target",
+        "s_pond", "i_pond",
+        "s_start_d", "i_start_d",
+        "s_trig", "i_trig",
+        "s_spd_s", "i_spd_s",
+        "s_spd_e", "i_spd_e",
+        "s_rod_s", "i_rod_s",
+        "s_rod_e", "i_rod_e",
+        "w_rod_dyn"
+    ]
+    
+    for id in input_ids:
+        el = document.getElementById(id)
+        if el:
+            el.addEventListener("change", update_proxy)
+            # For range sliders, you might want input for realtime, but change is safer
+            if el.type == "range":
+                el.addEventListener("input", update_proxy)
 
+bind_listeners()
 document.getElementById("loader").style.display = "none"
 update_plot()
     </py-script>
