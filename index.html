@@ -14,12 +14,12 @@
         
         .app-container { display: flex; flex-direction: column; min-height: 100vh; }
         
-        /* PLOT AREA (Top on Mobile) */
+        /* PLOT AREA */
         .main-area { order: 1; width: 100%; background: white; padding-bottom: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); z-index: 2; }
         
         #plot-area { 
             width: 100%;
-            min-width: -webkit-fill-available; /* ADDED */
+            min-width: -webkit-fill-available;
             max-width: -webkit-fill-available; 
             display: flex; 
             justify-content: center; 
@@ -30,10 +30,9 @@
         #cheat-sheet-container { padding: 10px 15px; }
         #cheat-sheet { background: #e8f5e9; border-left: 4px solid var(--primary); padding: 10px; border-radius: 4px; font-family: monospace; font-size: 0.85rem; }
 
-        /* CONTROLS (Bottom on Mobile) */
+        /* CONTROLS */
         .sidebar { order: 2; padding: 15px; background: var(--bg); padding-bottom: 80px; }
 
-        /* DESKTOP OVERRIDE */
         @media (min-width: 900px) {
             .app-container { flex-direction: row; height: 100vh; overflow: hidden; }
             .sidebar { order: 1; width: var(--sidebar-width); height: 100%; overflow-y: auto; border-right: 1px solid #ddd; padding-bottom: 20px; background: white; }
@@ -64,6 +63,8 @@
         #loader { position: fixed; inset: 0; background: white; z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; }
         .spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        
+        #debug-log { display:none; background: #333; color: #f88; padding: 10px; font-family: monospace; font-size: 0.8rem; margin: 10px; border-radius: 4px; white-space: pre-wrap; }
     </style>
 </head>
 <body>
@@ -150,7 +151,8 @@
             </details>
 
             <div class="fab-container">
-                <button id="btn-auto" class="btn-calc" py-click="run_auto_tune_handler">⚡ AUTO-OPTIMIZE PLAN</button>
+                <!-- REMOVED PY-CLICK -->
+                <button id="btn-auto" class="btn-calc">⚡ AUTO-OPTIMIZE PLAN</button>
             </div>
 
             <details>
@@ -202,16 +204,18 @@
                             <input type="number" id="i_trig" value="15" step="1" oninput="s_trig.value=this.value">
                         </div>
                     </div>
-                    <button class="btn-calc" style="background:#007bff;" py-click="update_plot_handler">Update Graph Only</button>
+                    <!-- REMOVED PY-CLICK, ADDED ID -->
+                    <button id="btn-update" class="btn-calc" style="background:#007bff;">Update Graph Only</button>
                 </div>
             </details>
         </div>
 
-        <!-- PLOT AREA (Top on Mobile) -->
+        <!-- PLOT AREA -->
         <div class="main-area">
             <div id="cheat-sheet-container">
                 <div id="cheat-sheet">Initializing Engine...</div>
             </div>
+            <div id="debug-log"></div>
             <div id="plot-area"></div>
         </div>
     </div>
@@ -226,12 +230,21 @@
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
+import traceback
 from js import document, window
+from pyodide.ffi import create_proxy
 
+# --- PHYSICS CONSTANTS ---
 PHYSICS = {
     'gravity_scale': 0.28, 'lift_scale': 0.22, 'drag_scale': 0.04,
     'buoyancy_scale': 0.05, 'belly_tuning': 0.20, 'leader_lift': 0.015
 }
+
+def log_error(e):
+    el = document.getElementById("debug-log")
+    el.style.display = "block"
+    el.innerHTML = f"PYTHON ERROR: {str(e)}"
+    print(f"ERROR: {e}")
 
 def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader, 
                            rod_start, rod_end, rod_dynamic, rod_move_dist,
@@ -269,6 +282,7 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
     y = []
     speeds = []
     rod_heights = []
+    spoon_angles = []
     is_stalled = [] 
     initial_geometry = {} 
     
@@ -285,11 +299,12 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
             y.extend([bottom_limit] * remaining)
             speeds.extend([0] * remaining)
             rod_heights.extend([rod_end if rod_dynamic else rod_start] * remaining)
+            spoon_angles.extend([0] * remaining)
             is_stalled.extend([True] * remaining)
             break
             
         if d < 0.2:
-            y.append(0); speeds.append(0); is_stalled.append(True); rod_heights.append(rod_start)
+            y.append(0); speeds.append(0); is_stalled.append(True); rod_heights.append(rod_start); spoon_angles.append(0)
             continue
             
         if rod_dynamic:
@@ -328,6 +343,8 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
         dy = r_h - current_depth
         geo_angle = np.arctan(dy / d)
         
+        spoon_angles.append(np.degrees(geo_angle))
+        
         aoa_factor = 1.0 + (np.sin(geo_angle) * aoa_sensitivity)
         belly_impact = props['belly'] * (d / 25.0) * PHYSICS['belly_tuning'] * ratio_in_water
         effective_angle_sin = np.sin(geo_angle) + belly_impact
@@ -348,7 +365,7 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
         if current_depth > 0: current_depth = 0
         y.append(current_depth)
         
-    return x, y, speeds, is_stalled, props['color'], stall_threshold, initial_geometry, rod_heights
+    return x, y, speeds, props['color'], initial_geometry, rod_heights, spoon_angles
 
 # --- OPTIMIZER ---
 def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line, pond_bottom):
@@ -374,7 +391,14 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
             for s_depth in start_depths:
                 for trig_pct in [0.6, 0.8]:
                     trigger_dist = dist * trig_pct
-                    x, y, _, _, _, _, _, _ = calculate_physics_data(dist, s_depth, line, diameter, leader, r_s, r_e, r_dyn, trigger_dist, spd_s, spd_e, trigger_dist, weight, shape, steps=30, bottom_limit=pond_bottom)
+                    # Correct unpacking: 7 return values
+                    x, y, _, _, _, _, _ = calculate_physics_data(
+                        dist, s_depth, line, diameter, leader, 
+                        r_s, r_e, r_dyn, trigger_dist, 
+                        spd_s, spd_e, trigger_dist, 
+                        weight, shape, 
+                        steps=30, bottom_limit=pond_bottom
+                    )
                     
                     min_depth = np.min(y)
                     if min_depth <= (pond_bottom + 0.1): score = -5000 
@@ -409,102 +433,122 @@ def set_val(id, val):
     if el.type == "checkbox": el.checked = val
 
 # --- MAIN PLOT ---
-def update_plot():
-    line = get_val("w_line"); leader = get_val("w_leader"); shape = get_val("w_shape")
-    weight = get_val("s_weight"); dia = get_val("s_dia"); reel_cm = int(get_val("s_reel"))
-    dist = get_val("s_dist"); target_depth = get_val("s_target"); pond_depth = get_val("s_pond")
-    start_depth = get_val("s_start_d"); trigger = get_val("s_trig")
-    spd_s = get_val("s_spd_s"); spd_e = get_val("s_spd_e")
-    rod_dyn = get_val("w_rod_dyn"); rod_s = get_val("s_rod_s"); rod_e = get_val("s_rod_e")
-    p_bot = -pond_depth
+def update_plot(event=None):
+    try:
+        line = get_val("w_line"); leader = get_val("w_leader"); shape = get_val("w_shape")
+        weight = get_val("s_weight"); dia = get_val("s_dia"); reel_cm = int(get_val("s_reel"))
+        dist = get_val("s_dist"); target_depth = get_val("s_target"); pond_depth = get_val("s_pond")
+        start_depth = get_val("s_start_d"); trigger = get_val("s_trig")
+        spd_s = get_val("s_spd_s"); spd_e = get_val("s_spd_e")
+        rod_dyn = get_val("w_rod_dyn"); rod_s = get_val("s_rod_s"); rod_e = get_val("s_rod_e")
+        p_bot = -pond_depth
 
-    x, y, speeds, is_stalled, color, stall_lim, init_geo, rod_heights = calculate_physics_data(
-        dist, start_depth, line, dia, leader, rod_s, rod_e, rod_dyn, trigger,
-        spd_s, spd_e, trigger, weight, shape, steps=150, bottom_limit=p_bot
-    )
+        x, y, speeds, color, init_geo, rod_heights, angles = calculate_physics_data(
+            dist, start_depth, line, dia, leader, rod_s, rod_e, rod_dyn, trigger,
+            spd_s, spd_e, trigger, weight, shape, steps=150, bottom_limit=p_bot
+        )
 
-    is_mobile = window.innerWidth < 900
-    fig_size = (5, 9) if is_mobile else (10, 6)
-    
-    plt.close('all')
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=fig_size, gridspec_kw={'height_ratios': [3, 1]})
-    
-    if is_mobile: plt.subplots_adjust(left=0.12, right=0.98, bottom=0.05, top=0.98)
-    else: plt.subplots_adjust(left=0.08, right=0.95, bottom=0.1, top=0.95)
-
-    ax1.add_patch(patches.Rectangle((-5, -7), 60, 7, color='deepskyblue', alpha=0.1))
-    ax1.add_patch(patches.Rectangle((0, -target_depth-0.3), dist+4, 0.6, color='limegreen', alpha=0.3, label='Target'))
-    ax1.axhline(0, color='dodgerblue', linewidth=2)
-    ax1.axhline(p_bot, color='sienna', linewidth=3)
-    
-    ax1.plot(x, y, color=color, linewidth=3, label=line)
-    ax1.axvline(trigger, color='purple', linestyle='--', alpha=0.5)
-    
-    ax1.plot([-1.5, -1.5], [0.8, 1.5], 'k', lw=3)
-    ax1.plot([-1.8, -1.5, -1.2], [0, 0.8, 0], 'k', lw=2)
-    ax1.add_patch(patches.Circle((-1.5, 1.75), 0.25, color='k'))
-    ax1.plot([-1.5, 0], [1.0, rod_s], 'k', lw=3)
-    if rod_dyn: ax1.plot([-1.5, 0], [1.0, rod_e], 'gray', ls=':')
+        is_mobile = window.innerWidth < 900
+        fig_size = (5, 9) if is_mobile else (10, 6)
         
-    if init_geo:
-        ax1.plot([0, init_geo['entry_x']], [init_geo['rod_h'], 0], 'gray', ls='--', lw=1)
-        ax1.plot([init_geo['entry_x'], init_geo['spoon_x']], [0, init_geo['spoon_y']], 'gray', ls='-', lw=1)
+        plt.close('all')
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=fig_size, gridspec_kw={'height_ratios': [3, 1]})
+        
+        if is_mobile: plt.subplots_adjust(left=0.12, right=0.98, bottom=0.05, top=0.98)
+        else: plt.subplots_adjust(left=0.08, right=0.95, bottom=0.1, top=0.95)
 
-    ax1.set_ylim(-4.5, 4.0); ax1.set_xlim(dist+3, -3)
-    ax1.set_ylabel("") 
-    ax1.legend(loc='upper left', fontsize='small')
-    ax1.grid(True, alpha=0.5, ls='--')
-    
-    ax2.plot(x, speeds, color='purple', lw=2, label="Speed")
-    ax2.set_ylim(0, 150); ax2.set_yticks([]) 
-    ax3 = ax2.twinx()
-    ax3.plot(x, rod_heights, color='brown', ls='-.', lw=2, label="Rod")
-    ax3.set_ylim(0, 4.0); ax3.set_yticks([]) 
-    ax2.set_xlim(dist+3, -3); ax2.grid(True, alpha=0.3)
-    lines_1, labels_1 = ax2.get_legend_handles_labels()
-    lines_2, labels_2 = ax3.get_legend_handles_labels()
-    ax2.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', fontsize='x-small')
+        ax1.add_patch(patches.Rectangle((-5, -7), 60, 7, color='deepskyblue', alpha=0.1))
+        ax1.add_patch(patches.Rectangle((0, -target_depth-0.3), dist+4, 0.6, color='limegreen', alpha=0.3, label='Target'))
+        ax1.axhline(0, color='dodgerblue', linewidth=2)
+        ax1.axhline(p_bot, color='sienna', linewidth=3)
+        
+        ax1.plot(x, y, color=color, linewidth=3, label=line)
+        ax1.axvline(trigger, color='purple', linestyle='--', alpha=0.5)
+        
+        ax1.plot([-1.5, -1.5], [0.8, 1.5], 'k', lw=3)
+        ax1.plot([-1.8, -1.5, -1.2], [0, 0.8, 0], 'k', lw=2)
+        ax1.add_patch(patches.Circle((-1.5, 1.75), 0.25, color='k'))
+        ax1.plot([-1.5, 0], [1.0, rod_s], 'k', lw=3)
+        if rod_dyn: ax1.plot([-1.5, 0], [1.0, rod_e], 'gray', ls=':')
+            
+        if init_geo:
+            ax1.plot([0, init_geo['entry_x']], [init_geo['rod_h'], 0], 'gray', ls='--', lw=1)
+            ax1.plot([init_geo['entry_x'], init_geo['spoon_x']], [0, init_geo['spoon_y']], 'gray', ls='-', lw=1)
 
-    cranks_1 = ((dist - trigger) * 100) / reel_cm
-    cranks_2 = (trigger * 100) / reel_cm
-    rod_action = f"Lower to {rod_e}m" if rod_dyn else f"Hold Steady"
-    target = -target_depth
-    in_zone = [val for val in y if abs(val - target) <= 0.3]
-    pct = (len(in_zone) / len(y)) * 100
-    
-    # FIXED SYNTAX (Single quotes for python, double for HTML)
-    sheet_html = '<div style="background-color:#e8f5e9; border-left: 5px solid #28a745; padding: 10px; margin-bottom: 15px; font-family: monospace; font-size: 0.9rem; border-radius: 4px;">'
-    sheet_html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">'
-    sheet_html += f'<span style="font-weight:bold; font-size:1.1rem">🎯 Score: {pct:.0f}%</span>'
-    sheet_html += f'<span style="color:#666">Reel: {reel_cm}cm</span></div>'
-    sheet_html += '<hr style="border:0; border-top:1px solid #ccc; margin:5px 0;">'
-    sheet_html += f'1. Cast <b>{dist}m</b>. Sink to <b>{start_depth}m</b>.<br>'
-    sheet_html += f'2. <b>HOLD ROD {rod_s}m.</b> Reel <b>{cranks_1:.1f}x</b> ({int(spd_s)} cm/s)<br>'
-    sheet_html += '<div style="background-color:#fff3cd; padding:5px; margin:5px 0; border-radius:4px;">'
-    sheet_html += f'<b>⚡ TRIGGER:</b> {rod_action} + Slow ({int(spd_e)} cm/s)</div>'
-    sheet_html += f'4. Reel <b>{cranks_2:.1f}x</b> to finish.</div>'
-    
-    document.getElementById("cheat-sheet").innerHTML = sheet_html
-    display(fig, target="plot-area", append=False)
+        ax1.set_ylim(-4.5, 4.0); ax1.set_xlim(dist+3, -3)
+        ax1.set_ylabel("") 
+        ax1.legend(loc='upper left', fontsize='small')
+        ax1.grid(True, alpha=0.5, ls='--')
+        
+        ax2.plot(x, speeds, color='purple', lw=2, label="Speed")
+        ax2.set_ylim(0, 150); ax2.set_yticks([]) 
+        ax3 = ax2.twinx()
+        ax3.plot(x, rod_heights, color='brown', ls='-.', lw=2, label="Rod")
+        ax3.set_ylim(0, 4.0); ax3.set_yticks([]) 
+        ax2.set_xlim(dist+3, -3); ax2.grid(True, alpha=0.3)
+        lines_1, labels_1 = ax2.get_legend_handles_labels()
+        lines_2, labels_2 = ax3.get_legend_handles_labels()
+        ax2.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', fontsize='x-small')
 
-def run_auto_tune_handler(*args):
-    dist = get_val("s_dist"); target = get_val("s_target"); wt = get_val("s_weight")
-    shape = get_val("w_shape"); dia = get_val("s_dia"); leader = get_val("w_leader")
-    line = get_val("w_line"); pond = -get_val("s_pond")
-    
-    res = optimize_technique(dist, target, wt, shape, dia, leader, line, pond)
-    
-    if res:
-        set_val("s_spd_s", int(res['spd_s'])); set_val("s_spd_e", int(res['spd_e']))
-        set_val("s_rod_s", res['rod_s']); set_val("s_rod_e", res['rod_e'])
-        set_val("w_rod_dyn", res['rod_dyn']); set_val("s_start_d", round(res['start_depth'], 1))
-        set_val("s_trig", int(res['trigger_dist']))
-        update_plot_handler(None)
-    else:
-        document.getElementById("cheat-sheet").innerHTML = "<b>❌ SETUP IMPOSSIBLE. CHANGE GEAR.</b>"
+        # Spoon Attitude
+        step = 8
+        q_x = x[::step]
+        q_y = speeds[::step]
+        q_ang = np.array(angles)[::step]
+        rads = np.radians(q_ang)
+        u = np.cos(rads)
+        v = np.sin(rads)
+        ax2.quiver(q_x, q_y, u, v, scale=30, width=0.005, headaxislength=0, headlength=0, pivot='mid', color='black')
 
-def update_plot_handler(*args):
-    update_plot()
+        cranks_1 = ((dist - trigger) * 100) / reel_cm
+        cranks_2 = (trigger * 100) / reel_cm
+        rod_action = f"Lower to {rod_e}m" if rod_dyn else f"Hold Steady"
+        target = -target_depth
+        in_zone = [val for val in y if abs(val - target) <= 0.3]
+        pct = (len(in_zone) / len(y)) * 100
+        
+        sheet_html = '<div style="background-color:#e8f5e9; border-left: 5px solid #28a745; padding: 10px; margin-bottom: 15px; font-family: monospace; font-size: 0.9rem; border-radius: 4px;">'
+        sheet_html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">'
+        sheet_html += f'<span style="font-weight:bold; font-size:1.1rem">🎯 Score: {pct:.0f}%</span>'
+        sheet_html += f'<span style="color:#666">Reel: {reel_cm}cm</span></div>'
+        sheet_html += '<hr style="border:0; border-top:1px solid #ccc; margin:5px 0;">'
+        sheet_html += f'1. Cast <b>{dist}m</b>. Sink to <b>{start_depth}m</b>.<br>'
+        sheet_html += f'2. <b>HOLD ROD {rod_s}m.</b> Reel <b>{cranks_1:.1f}x</b> ({int(spd_s)} cm/s)<br>'
+        sheet_html += '<div style="background-color:#fff3cd; padding:5px; margin:5px 0; border-radius:4px;">'
+        sheet_html += f'<b>⚡ TRIGGER:</b> {rod_action} + Slow ({int(spd_e)} cm/s)</div>'
+        sheet_html += f'4. Reel <b>{cranks_2:.1f}x</b> to finish.</div>'
+        
+        document.getElementById("cheat-sheet").innerHTML = sheet_html
+        display(fig, target="plot-area", append=False)
+        
+    except Exception as e:
+        log_error(e)
+
+def run_auto_tune_handler(event=None):
+    try:
+        dist = get_val("s_dist"); target = get_val("s_target"); wt = get_val("s_weight")
+        shape = get_val("w_shape"); dia = get_val("s_dia"); leader = get_val("w_leader")
+        line = get_val("w_line"); pond = -get_val("s_pond")
+        
+        res = optimize_technique(dist, target, wt, shape, dia, leader, line, pond)
+        
+        if res:
+            set_val("s_spd_s", int(res['spd_s'])); set_val("s_spd_e", int(res['spd_e']))
+            set_val("s_rod_s", res['rod_s']); set_val("s_rod_e", res['rod_e'])
+            set_val("w_rod_dyn", res['rod_dyn']); set_val("s_start_d", round(res['start_depth'], 1))
+            set_val("s_trig", int(res['trigger_dist']))
+            update_plot()
+        else:
+            document.getElementById("cheat-sheet").innerHTML = "<b>❌ SETUP IMPOSSIBLE. CHANGE GEAR.</b>"
+    except Exception as e:
+        log_error(e)
+
+# --- BINDINGS ---
+auto_proxy = create_proxy(run_auto_tune_handler)
+update_proxy = create_proxy(update_plot)
+
+document.getElementById("btn-auto").addEventListener("click", auto_proxy)
+document.getElementById("btn-update").addEventListener("click", update_proxy)
 
 document.getElementById("loader").style.display = "none"
 update_plot()
