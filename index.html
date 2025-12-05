@@ -19,7 +19,6 @@
         
         #plot-area { 
             width: 100%;
-            /* V46/V38 FIX: Fill available space */
             min-width: -webkit-fill-available;
             max-width: -webkit-fill-available; 
             display: flex; 
@@ -30,7 +29,7 @@
         
         #cheat-sheet-container { padding: 10px 15px; }
         
-        /* V46 FIX: Unified Border Style */
+        /* UNIFIED SCORE BOX STYLE */
         #cheat-sheet { 
             background: #e8f5e9; 
             border-left: 5px solid var(--primary); 
@@ -39,11 +38,13 @@
             font-family: monospace; 
             font-size: 0.9rem; 
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
         }
 
         /* CONTROLS */
         .sidebar { order: 2; padding: 15px; background: var(--bg); padding-bottom: 80px; }
 
+        /* DESKTOP OVERRIDE */
         @media (min-width: 900px) {
             .app-container { flex-direction: row; height: 100vh; overflow: hidden; }
             .sidebar { order: 1; width: var(--sidebar-width); height: 100%; overflow-y: auto; border-right: 1px solid #ddd; padding-bottom: 20px; background: white; }
@@ -398,7 +399,7 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
             for s_depth in start_depths:
                 for trig_pct in [0.6, 0.8]:
                     trigger_dist = dist * trig_pct
-                    # Correct unpacking (7 return values)
+                    # Correct unpacking
                     x, y, _, _, _, _, _ = calculate_physics_data(
                         dist, s_depth, line, diameter, leader, r_s, r_e, r_dyn, trigger_dist, 
                         spd_s, spd_e, trigger_dist, weight, shape, 
@@ -459,7 +460,6 @@ def update_plot(event=None):
         plt.close('all')
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=fig_size, gridspec_kw={'height_ratios': [3, 1]})
         
-        # V47 Logic for Margins + V45 Logic for Size = Full Fit
         if is_mobile: plt.subplots_adjust(left=0.12, right=0.98, bottom=0.05, top=0.98)
         else: plt.subplots_adjust(left=0.08, right=0.95, bottom=0.1, top=0.95)
 
@@ -496,7 +496,6 @@ def update_plot(event=None):
         lines_2, labels_2 = ax3.get_legend_handles_labels()
         ax2.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', fontsize='x-small')
         
-        # Attitude
         step = 8
         q_x = x[::step]
         q_y = speeds[::step]
@@ -513,7 +512,7 @@ def update_plot(event=None):
         in_zone = [val for val in y if abs(val - target) <= 0.3]
         pct = (len(in_zone) / len(y)) * 100
         
-        # V46 FIX: Safe String + One Border
+        # Clean Single-Quote Strings
         sheet_html = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">'
         sheet_html += f'<span style="font-weight:bold; font-size:1.1rem">🎯 Score: {pct:.0f}%</span>'
         sheet_html += f'<span style="color:#666">Reel: {reel_cm}cm</span></div>'
@@ -560,6 +559,7 @@ def bind_listeners():
     document.getElementById("btn-auto").addEventListener("click", auto_proxy)
     document.getElementById("btn-update").addEventListener("click", update_proxy)
     
+    # Bind Inputs
     input_ids = [
         "w_line", "w_leader", "w_shape", 
         "s_weight", "i_weight",
