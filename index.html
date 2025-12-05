@@ -60,7 +60,7 @@
             position: sticky;
             top: 0;
             background: var(--bg);
-            padding: 10px 0;
+            padding: 10px 10px;
             z-index: 10;
             border-bottom: 1px solid #ddd;
         }
@@ -82,7 +82,7 @@
         input[type=number], select { width: 70px; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; text-align: center; background: #f8f9fa; }
         select { width: 100%; text-align: left; }
         
-        .action-bar { display: flex; gap: 10px; margin-top: 15px; }
+        .action-bar { display: flex; gap: 10px; margin-bottom: 15px; }
         .btn-calc { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; }
         .btn-calc.secondary { background: #007bff; }
         .btn-calc:active { transform: translateY(1px); }
@@ -130,6 +130,11 @@
 
         <!-- SIDEBAR -->
         <div class="sidebar">
+            <!-- V51 ACTION BAR MOVE -->
+            <div class="action-bar">
+                <button id="btn-auto" class="btn-calc">⚡ Auto-Optimize</button>
+                <button id="btn-update" class="btn-calc secondary">Update Graph</button>
+            </div>
             <!-- V48 UI-REWORK: Tabs -->
             <div class="tabs">
                 <button class="tab-button active" data-tab="gear">1. Gear & Targets</button>
@@ -261,12 +266,6 @@
                         </div>
                     </div>
                 </div>
-            </div>
-            
-            <!-- V48 UI-REWORK: Action Bar -->
-            <div class="action-bar">
-                <button id="btn-auto" class="btn-calc">⚡ Auto-Optimize</button>
-                <button id="btn-update" class="btn-calc secondary">Update Graph</button>
             </div>
         </div>
     </div>
@@ -422,15 +421,16 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
     best_params = {}
 
     profiles = []
+    # V50 SLOWER OPTIMIZER: Added more, slower profiles
     if weight >= 2.0:
-        if line == "PE (Braid)": profiles = [(80, 50), (70, 40), (60, 30)]
-        else: profiles = [(120, 80), (100, 70), (90, 60)]
+        if line == "PE (Braid)": profiles = [(80, 50), (70, 40), (60, 30), (90, 60)]
+        else: profiles = [(120, 80), (100, 70), (90, 60), (80, 50), (70, 40)]
     elif weight >= 1.2:
-        if "Slim" in shape or "Jeckyll" in shape: profiles = [(80, 60), (70, 50), (90, 70)]
-        else: profiles = [(70, 40), (60, 30), (50, 25)]
+        if "Slim" in shape or "Jeckyll" in shape: profiles = [(80, 60), (70, 50), (90, 70), (60, 40)]
+        else: profiles = [(70, 40), (60, 30), (50, 25), (80, 50)]
     else:
-        if line == "PE (Braid)": profiles = [(40, 15), (30, 15)]
-        else: profiles = [(50, 20), (40, 20), (30, 15)]
+        if line == "PE (Braid)": profiles = [(40, 15), (30, 15), (50, 25)]
+        else: profiles = [(50, 20), (40, 20), (30, 15), (60, 30)]
 
     rod_opts = [(1.5, 0.0, True), (0.0, 0.0, False)]
     start_depths = [target_depth, min(target_depth + 0.5, abs(pond_bottom) - 0.2)]
@@ -454,7 +454,8 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
                         tolerance = 0.3 
                         in_zone = [val for val in y if abs(val - target) <= tolerance]
                         score = (len(in_zone) / len(y)) * 100
-                        score -= (spd_s * 0.01)
+                        # V50 SLOWER OPTIMIZER: Increased speed penalty significantly
+                        score -= (spd_s * 0.2) 
 
                     if score > best_score:
                         best_score = score
@@ -501,22 +502,14 @@ def update_plot(event=None):
         px_width = plot_div.clientWidth
         
         # Convert to inches (approx 100 DPI)
-        fig_width_in = px_width / 100
-        
-        # Determine aspect ratio
-        if is_mobile:
-             # Mobile: Portrait (Height is 1.2x width)
-             fig_height_in = fig_width_in * 1.2
-        else:
-             # Desktop: Landscape (Height is 0.6x width)
-             fig_height_in = fig_width_in * 0.6
+        fig_width_in = px_width / 100.0
+        fig_height_in = fig_width_in * 0.6
         
         plt.close('all')
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(fig_width_in, fig_height_in), dpi=100, gridspec_kw={'height_ratios': [3, 1]})
 
         # Adjusted margins for better fit with dynamic sizing
-         
-        plt.subplots_adjust(left=0.04, right=0.99, bottom=0.1, top=0.95)
+        plt.subplots_adjust(left=0.05, right=0.98, bottom=0.1, top=0.95)
 
         ax1.add_patch(patches.Rectangle((-5, -7), 60, 7, color='deepskyblue', alpha=0.1))
         ax1.add_patch(patches.Rectangle((0, -target_depth-0.3), dist+4, 0.6, color='limegreen', alpha=0.3, label='Target'))
@@ -526,17 +519,22 @@ def update_plot(event=None):
         ax1.plot(x, y, color=color, linewidth=3, label=line)
         ax1.axvline(trigger, color='purple', linestyle='--', alpha=0.5)
         
+        # V50-2 Angler graphic
+        rod_wrist_x = -1.2
+        rod_wrist_y = 1.0
+        ax1.add_patch(patches.Rectangle((-3, -0.5), 3, 0.5, color='#28a745', alpha=0.6)) # Land
         ax1.plot([-1.5, -1.5], [0.8, 1.5], 'k', lw=3)
         ax1.plot([-1.8, -1.5, -1.2], [0, 0.8, 0], 'k', lw=2)
         ax1.add_patch(patches.Circle((-1.5, 1.75), 0.25, color='k'))
-        ax1.plot([-1.5, 0], [1.0, rod_s], 'k', lw=3)
-        if rod_dyn: ax1.plot([-1.5, 0], [1.0, rod_e], 'gray', ls=':')
+        ax1.plot([-1.5, rod_wrist_x], [1.3, rod_wrist_y], 'k', lw=3) # Arm
+        ax1.plot([rod_wrist_x, 0], [rod_wrist_y, rod_s], 'k', lw=3) # Rod
+        if rod_dyn: ax1.plot([rod_wrist_x, 0], [rod_wrist_y, rod_e], 'gray', ls=':')
             
         if init_geo:
             ax1.plot([0, init_geo['entry_x']], [init_geo['rod_h'], 0], 'gray', ls='--', lw=1)
             ax1.plot([init_geo['entry_x'], init_geo['spoon_x']], [0, init_geo['spoon_y']], 'gray', ls='-', lw=1)
 
-        ax1.set_ylim(-4.5, 4.0); ax1.set_xlim(dist+3, -3)
+        ax1.set_ylim(-4.5, 2.5); ax1.set_xlim(dist+3, -3)
         ax1.set_ylabel("") 
         ax1.legend(loc='upper left', fontsize='small')
         ax1.grid(True, alpha=0.5, ls='--')
@@ -669,13 +667,14 @@ def debounce_update_plot(e=None):
 # --- BINDING HELPERS ---
 update_proxy = create_proxy(update_plot)
 auto_proxy = create_proxy(run_auto_tune_handler)
+debounce_proxy = create_proxy(debounce_update_plot)
 
 def bind_listeners():
     document.getElementById("btn-auto").addEventListener("click", auto_proxy)
     document.getElementById("btn-update").addEventListener("click", update_proxy)
     
     # V49 RESIZE FIX: Add listener for window resize
-    window.addEventListener('resize', create_proxy(debounce_update_plot))
+    window.addEventListener('resize', debounce_proxy)
 
     # Clone cheat sheet container for sticky header
     original_container = document.getElementById("cheat-sheet-container")
@@ -708,8 +707,12 @@ def bind_listeners():
     for id in input_ids:
         el = document.getElementById(id)
         if el:
-            el.addEventListener("change", update_proxy)
-            if el.type == "range": el.addEventListener("input", update_proxy)
+            # Use debounce for sliders to avoid choppiness
+            if el.type == "range":
+                el.addEventListener("input", debounce_proxy)
+                el.addEventListener("change", update_proxy) # Update once on release
+            else:
+                el.addEventListener("change", update_proxy)
 
 bind_listeners()
 setup_ui_listeners() # V48 UI-REWORK: Call the new UI setup
