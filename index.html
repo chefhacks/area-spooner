@@ -60,7 +60,7 @@
             position: sticky;
             top: 0;
             background: var(--bg);
-            padding: 10px 10px;
+            padding: 10px 0;
             z-index: 10;
             border-bottom: 1px solid #ddd;
         }
@@ -503,7 +503,14 @@ def update_plot(event=None):
         
         # Convert to inches (approx 100 DPI)
         fig_width_in = px_width / 100.0
-        fig_height_in = fig_width_in * 0.6
+        
+        # Determine aspect ratio
+        if is_mobile:
+             # Mobile: Portrait (Height is 1.2x width)
+             fig_height_in = fig_width_in * 1.2
+        else:
+             # Desktop: Landscape (Height is 0.6x width)
+             fig_height_in = fig_width_in * 0.8
         
         plt.close('all')
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(fig_width_in, fig_height_in), dpi=100, gridspec_kw={'height_ratios': [3, 1]})
@@ -667,14 +674,13 @@ def debounce_update_plot(e=None):
 # --- BINDING HELPERS ---
 update_proxy = create_proxy(update_plot)
 auto_proxy = create_proxy(run_auto_tune_handler)
-debounce_proxy = create_proxy(debounce_update_plot)
 
 def bind_listeners():
     document.getElementById("btn-auto").addEventListener("click", auto_proxy)
     document.getElementById("btn-update").addEventListener("click", update_proxy)
     
     # V49 RESIZE FIX: Add listener for window resize
-    window.addEventListener('resize', debounce_proxy)
+    window.addEventListener('resize', create_proxy(debounce_update_plot))
 
     # Clone cheat sheet container for sticky header
     original_container = document.getElementById("cheat-sheet-container")
@@ -707,12 +713,8 @@ def bind_listeners():
     for id in input_ids:
         el = document.getElementById(id)
         if el:
-            # Use debounce for sliders to avoid choppiness
-            if el.type == "range":
-                el.addEventListener("input", debounce_proxy)
-                el.addEventListener("change", update_proxy) # Update once on release
-            else:
-                el.addEventListener("change", update_proxy)
+            el.addEventListener("change", update_proxy)
+            if el.type == "range": el.addEventListener("input", update_proxy)
 
 bind_listeners()
 setup_ui_listeners() # V48 UI-REWORK: Call the new UI setup
