@@ -19,6 +19,7 @@
         
         #plot-area { 
             width: 100%;
+            /* MOBILE FIT FIX */
             min-width: -webkit-fill-available;
             max-width: -webkit-fill-available; 
             display: flex; 
@@ -33,6 +34,7 @@
         /* CONTROLS */
         .sidebar { order: 2; padding: 15px; background: var(--bg); padding-bottom: 80px; }
 
+        /* DESKTOP OVERRIDE */
         @media (min-width: 900px) {
             .app-container { flex-direction: row; height: 100vh; overflow: hidden; }
             .sidebar { order: 1; width: var(--sidebar-width); height: 100%; overflow-y: auto; border-right: 1px solid #ddd; padding-bottom: 20px; background: white; }
@@ -218,12 +220,10 @@
         </div>
     </div>
 
-    <!-- CONFIG -->
     <py-config>
         packages = ["matplotlib", "numpy"]
     </py-config>
 
-    <!-- PYTHON -->
     <py-script>
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -340,9 +340,7 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
 
         dy = r_h - current_depth
         geo_angle = np.arctan(dy / d)
-        
         spoon_angles.append(np.degrees(geo_angle))
-        
         aoa_factor = 1.0 + (np.sin(geo_angle) * aoa_sensitivity)
         belly_impact = props['belly'] * (d / 25.0) * PHYSICS['belly_tuning'] * ratio_in_water
         effective_angle_sin = np.sin(geo_angle) + belly_impact
@@ -389,7 +387,7 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
             for s_depth in start_depths:
                 for trig_pct in [0.6, 0.8]:
                     trigger_dist = dist * trig_pct
-                    # Correct unpacking: 7 return values
+                    # Unpack 7 values correctly
                     x, y, _, _, _, _, _ = calculate_physics_data(
                         dist, s_depth, line, diameter, leader, r_s, r_e, r_dyn, trigger_dist, 
                         spd_s, spd_e, trigger_dist, weight, shape, 
@@ -485,8 +483,8 @@ def update_plot(event=None):
         lines_1, labels_1 = ax2.get_legend_handles_labels()
         lines_2, labels_2 = ax3.get_legend_handles_labels()
         ax2.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', fontsize='x-small')
-
-        # SPOON ATTITUDE QUIVERS
+        
+        # Attitude
         step = 8
         q_x = x[::step]
         q_y = speeds[::step]
@@ -503,7 +501,6 @@ def update_plot(event=None):
         in_zone = [val for val in y if abs(val - target) <= 0.3]
         pct = (len(in_zone) / len(y)) * 100
         
-        # SAFE STRING CONCATENATION
         sheet_html = '<div style="background-color:#e8f5e9; border-left: 5px solid #28a745; padding: 10px; margin-bottom: 15px; font-family: monospace; font-size: 0.9rem; border-radius: 4px;">'
         sheet_html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">'
         sheet_html += f'<span style="font-weight:bold; font-size:1.1rem">🎯 Score: {pct:.0f}%</span>'
@@ -534,22 +531,24 @@ def run_auto_tune_handler(event=None):
             set_val("s_rod_s", res['rod_s']); set_val("s_rod_e", res['rod_e'])
             set_val("w_rod_dyn", res['rod_dyn']); set_val("s_start_d", round(res['start_depth'], 1))
             set_val("s_trig", int(res['trigger_dist']))
-            update_plot()
+            update_plot_handler(None)
         else:
             document.getElementById("cheat-sheet").innerHTML = "<b>❌ SETUP IMPOSSIBLE. CHANGE GEAR.</b>"
     except Exception as e:
         log_error(e)
+
+def update_plot_handler(*args):
+    update_plot()
 
 # --- BINDING HELPERS ---
 update_proxy = create_proxy(update_plot)
 auto_proxy = create_proxy(run_auto_tune_handler)
 
 def bind_listeners():
-    # Bind Buttons
     document.getElementById("btn-auto").addEventListener("click", auto_proxy)
     document.getElementById("btn-update").addEventListener("click", update_proxy)
     
-    # Bind Inputs (IDs to watch)
+    # Bind Inputs
     input_ids = [
         "w_line", "w_leader", "w_shape", 
         "s_weight", "i_weight",
@@ -571,9 +570,7 @@ def bind_listeners():
         el = document.getElementById(id)
         if el:
             el.addEventListener("change", update_proxy)
-            # For range sliders, you might want input for realtime, but change is safer
-            if el.type == "range":
-                el.addEventListener("input", update_proxy)
+            if el.type == "range": el.addEventListener("input", update_proxy)
 
 bind_listeners()
 document.getElementById("loader").style.display = "none"
