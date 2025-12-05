@@ -36,6 +36,14 @@
             font-size: 0.9rem; 
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
+        #color-strategy {
+            background: #fff3cd;
+            border-left: 5px solid #ffc107;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
 
         /* CONTROLS */
         .sidebar { order: 2; padding: 15px; background: var(--bg); padding-bottom: 80px; }
@@ -115,16 +123,15 @@
         <!-- PLOT AREA (now first in source for mobile) -->
         <div class="main-area">
             <!-- V48 UI-REWORK: Sticky header for mobile -->
-            <div class="mobile-sticky-header">
-                <div id="cheat-sheet-container-sticky">
-                    <div id="cheat-sheet-sticky">Initializing...</div>
-                </div>
+        <div class="mobile-sticky-header">
+            <div id="cheat-sheet-container-sticky">
             </div>
-            <div id="cheat-sheet-container" style="display:none;"> <!-- Keep original for desktop -->
-                <div id="cheat-sheet">Initializing Engine...</div>
-            </div>
+        </div>
+        <div id="cheat-sheet-container"> <!-- Keep original for desktop -->
+            <div id="cheat-sheet">Initializing Engine...</div>
+        </div>
 
-            <div id="debug-log"></div>
+        <div id="debug-log"></div>
             <div id="plot-area"></div>
         </div>
 
@@ -139,6 +146,7 @@
             <div class="tabs">
                 <button class="tab-button active" data-tab="gear">1. Gear & Targets</button>
                 <button class="tab-button" data-tab="manual">2. Manual Tweaks</button>
+                <button class="tab-button" data-tab="strategy">3. Strategy</button>
             </div>
 
             <!-- V48 UI-REWORK: Tab Content -->
@@ -264,6 +272,27 @@
                             <input type="range" id="s_trig" min="0" max="40" step="1" value="15" oninput="i_trig.value=this.value">
                             <input type="number" id="i_trig" value="15" step="1" oninput="s_trig.value=this.value">
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="strategy-tab" class="tab-content">
+                <div class="widget-card">
+                    <div class="control-group">
+                        <label>Water Clarity</label>
+                        <select id="w_clarity">
+                            <option value="Clear">Clear (3+ m vis)</option>
+                            <option value="Stained">Stained (1-3m vis)</option>
+                            <option value="Turbid">Turbid (<1m vis)</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Light Condition</label>
+                        <select id="w_light">
+                            <option value="Bright">Bright Sun</option>
+                            <option value="Overcast">Overcast / Low Light</option>
+                            <option value="Dusk/Dawn">Dusk / Dawn</option>
+                        </select>
                     </div>
                 </div>
             </div>
@@ -583,17 +612,109 @@ def update_plot(event=None):
         sheet_html += '<div style="background-color:#fff3cd; padding:5px; margin:5px 0; border-radius:4px;">'
         sheet_html += f'<b>⚡ TRIGGER:</b> {rod_action} + Slow ({int(spd_e)} cm/s)</div>'
         sheet_html += f'4. Reel <b>{cranks_2:.1f}x</b> to finish.'
-
-        # V48 UI-REWORK: Update both normal and sticky cheat sheets
-        document.getElementById("cheat-sheet").innerHTML = sheet_html
+        
+        # V52 COLOR STRATEGY
+        clarity = get_val("w_clarity")
+        light = get_val("w_light")
+        recommendations, warnings = recommend_colors(clarity, light, target_depth)
+        
+        strategy_html = '<div id="color-strategy"><b>Color Strategy:</b><ul style="margin:5px 0 0 15px; padding:0; list-style-type: none;">'
+        for i, (color, reason) in enumerate(recommendations):
+            strategy_html += f'<li><b>{i+1}. {color}:</b> {reason}</li>'
+        
+        if warnings:
+            strategy_html += '<li style="margin-top:5px;">⚠️ <b>Avoid:</b> ' + ", ".join(warnings) + '</li>'
+            
+        strategy_html += '</ul></div>'
+        
+        # Combine and update
+        final_html = sheet_html + strategy_html
+        document.getElementById("cheat-sheet").innerHTML = final_html
         # The sticky one is a clone, find it by its new ID.
         sticky_sheet = document.getElementById("cheat-sheet-sticky")
-        if sticky_sheet: sticky_sheet.innerHTML = sheet_html
+        if sticky_sheet: sticky_sheet.innerHTML = final_html
 
         display(fig, target="plot-area", append=False)
         
     except Exception as e:
         log_error(e)
+
+# --- V53 ADVANCED COLOR STRATEGY ENGINE ---
+def recommend_colors(clarity, light, depth):
+    scores = {
+        "Silver": 0, "Gold": 0, "Copper": 0, "Chartreuse": 0,
+        "Black": 0, "White": 0, "Pink/Red": 0, "Orange": 0,
+        "Blue": 0, "Green/Olive": 0, "Natural": 0
+    }
+    
+    # 1. Score based on Clarity
+    if clarity == "Clear":
+        scores["Silver"] += 3
+        scores["Natural"] += 2
+        scores["Pink/Red"] += 1 # Good for shallow
+    elif clarity == "Stained":
+        scores["Gold"] += 3
+        scores["Chartreuse"] += 2
+        scores["Copper"] += 1
+    else: # Turbid
+        scores["Chartreuse"] += 3
+        scores["White"] += 2
+        scores["Black"] += 2
+
+    # 2. Score based on Light
+    if light == "Bright":
+        scores["Silver"] += 2
+        scores["Gold"] += 1
+    elif light == "Overcast":
+        scores["Gold"] += 2
+        scores["Chartreuse"] += 2
+        scores["White"] += 1
+    else: # Dusk/Dawn
+        scores["Chartreuse"] += 3
+        scores["Black"] += 3
+        scores["White"] += 2
+
+    # 3. Score/Penalize based on Depth
+    warnings = []
+    if depth > 7.5: # Deepest
+        scores["Blue"] += 3
+        scores["Green/Olive"] += 2
+        scores["Chartreuse"] += 1
+        scores["Red"] = -10; scores["Orange"] = -10; scores["Pink/Red"] = -10
+        if "Red" not in warnings: warnings.append("Red")
+    elif depth > 3.5: # Mid-Deep
+        scores["Blue"] += 2
+        scores["Green/Olive"] += 2
+        scores["Chartreuse"] += 2
+        scores["Red"] = -10; scores["Orange"] = -10; scores["Pink/Red"] = -10
+        if "Red" not in warnings: warnings.append("Red")
+    elif depth > 1.5: # Mid-Shallow
+        scores["Gold"] += 1
+        scores["Silver"] += 1
+        scores["Pink/Red"] = -5 # Fading
+    else: # Shallow
+        scores["Pink/Red"] += 2
+        scores["Orange"] += 1
+        scores["Copper"] += 1
+
+    # Sort by score
+    sorted_colors = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    
+    # Build recommendations with reasons
+    recs = []
+    for color, score in sorted_colors:
+        if score > 0:
+            reason = "High contrast" if color in ["Black", "White"] else "High visibility"
+            if clarity == "Clear" and color in ["Natural", "Silver"]: reason = "Natural imitation"
+            if light == "Overcast" and color == "Gold": reason = "Bright in low light"
+            if light == "Dusk/Dawn" and color == "Chartreuse": reason = "Fluorescent advantage"
+            if depth > 3.5 and color == "Blue": reason = "Deep water penetration"
+            
+            recs.append((color, reason))
+        if len(recs) >= 3:
+            break
+            
+    return recs, warnings
 
 def run_auto_tune_handler(*args):
     try:
@@ -707,7 +828,8 @@ def bind_listeners():
         "s_spd_e", "i_spd_e",
         "s_rod_s", "i_rod_s",
         "s_rod_e", "i_rod_e",
-        "w_rod_dyn"
+        "w_rod_dyn",
+        "w_clarity", "w_light"
     ]
     
     for id in input_ids:
