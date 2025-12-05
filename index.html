@@ -14,12 +14,11 @@
         
         .app-container { display: flex; flex-direction: column; min-height: 100vh; }
         
-        /* PLOT AREA (Top on Mobile) */
+        /* PLOT AREA */
         .main-area { order: 1; width: 100%; background: white; padding-bottom: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); z-index: 2; }
         
         #plot-area { 
             width: 100%;
-            /* MOBILE: Edge to Edge */
             min-width: -webkit-fill-available;
             max-width: -webkit-fill-available; 
             display: flex; 
@@ -31,24 +30,14 @@
         #cheat-sheet-container { padding: 10px 15px; }
         #cheat-sheet { background: #e8f5e9; border-left: 4px solid var(--primary); padding: 10px; border-radius: 4px; font-family: monospace; font-size: 0.85rem; }
 
-        /* CONTROLS (Bottom on Mobile) */
+        /* CONTROLS */
         .sidebar { order: 2; padding: 15px; background: var(--bg); padding-bottom: 80px; }
 
-        /* DESKTOP OVERRIDE */
         @media (min-width: 900px) {
             .app-container { flex-direction: row; height: 100vh; overflow: hidden; }
             .sidebar { order: 1; width: var(--sidebar-width); height: 100%; overflow-y: auto; border-right: 1px solid #ddd; padding-bottom: 20px; background: white; }
             .main-area { order: 2; flex: 1; height: 100%; overflow-y: auto; padding: 20px; background: var(--bg); }
-            
-            /* DESKTOP PLOT FIX: Fit Content */
-            #plot-area { 
-                width: 100%; 
-                max-width: fit-content; 
-                border-radius: 12px; 
-                overflow: hidden; 
-                min-width: auto; 
-                margin: 0 auto;
-            }
+            #plot-area { width: 100%; max-width: 900px; border-radius: 12px; overflow: hidden; min-width: auto; }
         }
 
         /* WIDGETS */
@@ -162,7 +151,7 @@
             </details>
 
             <div class="fab-container">
-                <button id="btn-auto" class="btn-calc">⚡ AUTO-OPTIMIZE PLAN</button>
+                <button id="btn-auto" class="btn-calc">⚡ AUTO-OPTIMIZE (SLOW MODE)</button>
             </div>
 
             <details>
@@ -229,12 +218,10 @@
         </div>
     </div>
 
-    <!-- CONFIG -->
     <py-config>
         packages = ["matplotlib", "numpy"]
     </py-config>
 
-    <!-- PYTHON -->
     <py-script>
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -380,18 +367,36 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
     best_score = -99999
     best_params = {}
 
+    # --- EXPANDED PROFILE GENERATION FOR SLOW PRIORITY ---
     profiles = []
+    
+    # 1. HEAVY (>2.0g)
     if weight >= 2.0:
-        if line == "PE (Braid)": profiles = [(80, 50), (70, 40), (60, 30)]
-        else: profiles = [(120, 80), (100, 70), (90, 60)]
+        if line == "PE (Braid)": 
+            # PE allows surprisingly slow retrieves with heavy spoons
+            profiles = [(80, 50), (70, 40), (60, 30), (50, 25)] 
+        else: 
+            # Fluoro/Nylon needs speed or it crashes
+            profiles = [(120, 80), (100, 70), (90, 60)]
+            
+    # 2. STANDARD (1.2g - 1.9g)
     elif weight >= 1.2:
-        if "Slim" in shape or "Jeckyll" in shape: profiles = [(80, 60), (70, 50), (90, 70)]
-        else: profiles = [(70, 40), (60, 30), (50, 25)]
+        if "Slim" in shape or "Jeckyll" in shape:
+             # Slim shapes stall easily, need consistent speed
+            profiles = [(80, 60), (70, 50), (90, 70)]
+        else:
+             # Wide shapes can flutter slow. Prioritize slow.
+            profiles = [(60, 30), (50, 20), (40, 20), (70, 40)]
+            
+    # 3. MICRO (<1.2g)
     else:
-        if line == "PE (Braid)": profiles = [(40, 15), (30, 15)]
-        else: profiles = [(50, 20), (40, 20), (30, 15)]
+        # Micros MUST go slow or they surf
+        profiles = [(50, 20), (40, 20), (30, 15), (30, 10)]
 
+    # Rod Options
     rod_opts = [(1.5, 0.0, True), (0.0, 0.0, False)]
+    
+    # Start Depths (Scoop vs Straight)
     start_depths = [target_depth, min(target_depth + 0.5, abs(pond_bottom) - 0.2)]
 
     for spd_s, spd_e in profiles:
@@ -399,21 +404,26 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
             for s_depth in start_depths:
                 for trig_pct in [0.6, 0.8]:
                     trigger_dist = dist * trig_pct
-                    # Correct unpacking: 7 return values
                     x, y, _, _, _, _, _ = calculate_physics_data(
-                        dist, s_depth, line, diameter, leader, r_s, r_e, r_dyn, trigger_dist, 
-                        spd_s, spd_e, trigger_dist, weight, shape, 
+                        dist, s_depth, line, diameter, leader, 
+                        r_s, r_e, r_dyn, trigger_dist, 
+                        spd_s, spd_e, trigger_dist, 
+                        weight, shape, 
                         steps=30, bottom_limit=pond_bottom
                     )
                     
                     min_depth = np.min(y)
-                    if min_depth <= (pond_bottom + 0.1): score = -5000 
+                    if min_depth <= (pond_bottom + 0.1): 
+                        score = -5000 # CRASH = FAIL
                     else:
                         target = -target_depth
                         tolerance = 0.3 
                         in_zone = [val for val in y if abs(val - target) <= tolerance]
                         score = (len(in_zone) / len(y)) * 100
-                        score -= (spd_s * 0.01)
+                        
+                        # --- SCORING UPDATE ---
+                        # Heavily penalize high speeds to bias the AI towards the slowest POSSIBLE working solution
+                        score -= (spd_s * 0.20) 
 
                     if score > best_score:
                         best_score = score
@@ -529,7 +539,7 @@ def update_plot(event=None):
     except Exception as e:
         log_error(e)
 
-def run_auto_tune_handler(*args):
+def run_auto_tune_handler(event=None):
     try:
         dist = get_val("s_dist"); target = get_val("s_target"); wt = get_val("s_weight")
         shape = get_val("w_shape"); dia = get_val("s_dia"); leader = get_val("w_leader")
@@ -547,9 +557,6 @@ def run_auto_tune_handler(*args):
             document.getElementById("cheat-sheet").innerHTML = "<b>❌ SETUP IMPOSSIBLE. CHANGE GEAR.</b>"
     except Exception as e:
         log_error(e)
-
-def update_plot_handler(*args):
-    update_plot()
 
 # --- BINDING HELPERS ---
 update_proxy = create_proxy(update_plot)
