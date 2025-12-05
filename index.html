@@ -27,7 +27,6 @@
         
         #cheat-sheet-container { padding: 10px 15px; }
         
-        /* V46 FIX: Unified Border Style */
         #cheat-sheet { 
             background: #e8f5e9; 
             border-left: 5px solid var(--primary); 
@@ -48,14 +47,14 @@
             #plot-area { width: 100%; max-width: 900px; border-radius: 12px; overflow: hidden; min-width: auto; }
         }
 
-        /* V48 UI-REWORK: TABS */
+        /* TABS */
         .tabs { display: flex; background: #e0e0e0; border-radius: 8px; padding: 4px; margin-bottom: 15px; }
         .tab-button { flex: 1; padding: 10px; text-align: center; background: transparent; border: none; font-weight: 600; cursor: pointer; border-radius: 6px; font-size: 0.9rem; color: #555; }
         .tab-button.active { background: white; color: var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
-        /* V48 UI-REWORK: STICKY HEADER */
+        /* STICKY HEADER */
         .mobile-sticky-header {
             display: none; /* Hidden on desktop */
             position: sticky;
@@ -82,11 +81,6 @@
         
         input[type=number], select { width: 70px; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; text-align: center; background: #f8f9fa; }
         select { width: 100%; text-align: left; }
-
-        /* V48 UI-REWORK: Hide number inputs on mobile */
-        @media (max-width: 899px) {
-            input[type=number] { display: none; }
-        }
         
         .action-bar { display: flex; gap: 10px; margin-top: 15px; }
         .btn-calc { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; }
@@ -502,32 +496,27 @@ def update_plot(event=None):
         )
 
         # DYNAMIC WIDTH CALCULATION (Inches)
-        # Get actual pixel width of the plot container
+        is_mobile = window.innerWidth < 900
         plot_div = document.getElementById("plot-area")
         px_width = plot_div.clientWidth
         
-        # Max limit 1080px to avoid stretch
-        if px_width > 1080: px_width = 1080
-        
         # Convert to inches (approx 100 DPI)
-        fig_width_in = px_width / 100.0
+        fig_width_in = px_width / 100
         
         # Determine aspect ratio
-        if px_width < 600:
-             # Mobile: Portrait (Height is 1.6x width)
-             fig_height_in = fig_width_in * 1.6
-             if fig_height_in > 10: fig_height_in = 10
+        if is_mobile:
+             # Mobile: Portrait (Height is 1.2x width)
+             fig_height_in = fig_width_in * 1.2
         else:
              # Desktop: Landscape (Height is 0.6x width)
              fig_height_in = fig_width_in * 0.6
         
         plt.close('all')
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(fig_width_in, fig_height_in), dpi=100, gridspec_kw={'height_ratios': [3, 1]})
-        
-        is_mobile = window.innerWidth < 900
+
         # Adjusted margins for better fit with dynamic sizing
-        if is_mobile: plt.subplots_adjust(left=0.15, right=0.98, bottom=0.08, top=0.95)
-        else: plt.subplots_adjust(left=0.08, right=0.95, bottom=0.1, top=0.95)
+         
+        plt.subplots_adjust(left=0.04, right=0.99, bottom=0.1, top=0.95)
 
         ax1.add_patch(patches.Rectangle((-5, -7), 60, 7, color='deepskyblue', alpha=0.1))
         ax1.add_patch(patches.Rectangle((0, -target_depth-0.3), dist+4, 0.6, color='limegreen', alpha=0.3, label='Target'))
