@@ -19,8 +19,6 @@
         
         #plot-area { 
             width: 100%;
-            min-width: -webkit-fill-available;
-            max-width: -webkit-fill-available; 
             display: flex; 
             justify-content: center; 
             margin: 0; 
@@ -29,7 +27,7 @@
         
         #cheat-sheet-container { padding: 10px 15px; }
         
-        /* UNIFIED SCORE BOX STYLE */
+        /* V46 FIX: Unified Border Style */
         #cheat-sheet { 
             background: #e8f5e9; 
             border-left: 5px solid var(--primary); 
@@ -38,13 +36,11 @@
             font-family: monospace; 
             font-size: 0.9rem; 
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-bottom: 10px;
         }
 
         /* CONTROLS */
         .sidebar { order: 2; padding: 15px; background: var(--bg); padding-bottom: 80px; }
 
-        /* DESKTOP OVERRIDE */
         @media (min-width: 900px) {
             .app-container { flex-direction: row; height: 100vh; overflow: hidden; }
             .sidebar { order: 1; width: var(--sidebar-width); height: 100%; overflow-y: auto; border-right: 1px solid #ddd; padding-bottom: 20px; background: white; }
@@ -52,25 +48,63 @@
             #plot-area { width: 100%; max-width: 900px; border-radius: 12px; overflow: hidden; min-width: auto; }
         }
 
-        /* WIDGETS */
-        details { margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; background: white; overflow: hidden; }
-        summary { background: #fff; padding: 12px 15px; cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; align-items: center; }
-        summary::after { content: '⚙️'; opacity: 0.5; }
-        details[open] summary { background: #f8f9fa; border-bottom: 1px solid #eee; }
-        .content { padding: 15px; }
-        
-        .control-group { margin-bottom: 12px; }
-        label { display: block; font-size: 0.8rem; color: #555; margin-bottom: 4px; font-weight: 500; }
-        .input-row { display: flex; gap: 8px; align-items: center; }
-        input[type=range] { flex: 1; height: 30px; }
-        input[type=number], select { width: 70px; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; text-align: center; }
-        select { width: 100%; text-align: left; }
-        
-        .fab-container { position: fixed; bottom: 0; left: 0; width: 100%; background: white; padding: 10px; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); z-index: 100; box-sizing: border-box; }
-        @media (min-width: 900px) { .fab-container { position: static; box-shadow: none; padding: 0; margin-top: 10px; } }
+        /* V48 UI-REWORK: TABS */
+        .tabs { display: flex; background: #e0e0e0; border-radius: 8px; padding: 4px; margin-bottom: 15px; }
+        .tab-button { flex: 1; padding: 10px; text-align: center; background: transparent; border: none; font-weight: 600; cursor: pointer; border-radius: 6px; font-size: 0.9rem; color: #555; }
+        .tab-button.active { background: white; color: var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
 
-        .btn-calc { width: 100%; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; box-shadow: 0 4px 6px rgba(40, 167, 69, 0.3); }
-        .btn-calc:active { transform: scale(0.98); }
+        /* V48 UI-REWORK: STICKY HEADER */
+        .mobile-sticky-header {
+            display: none; /* Hidden on desktop */
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            padding: 10px 0;
+            z-index: 10;
+            border-bottom: 1px solid #ddd;
+        }
+
+        @media (max-width: 899px) {
+            .mobile-sticky-header { display: block; }
+            .main-area { padding-top: 0; }
+        }
+
+        /* WIDGETS */
+        .widget-card { margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; background: white; overflow: hidden; padding: 15px; }
+        .control-group { margin-bottom: 15px; position: relative; }
+        label { display: block; font-size: 0.8rem; color: #666; margin-bottom: 5px; font-weight: 500; }
+        .input-row { display: flex; gap: 8px; align-items: center; }
+        input[type=range] { flex: 1; height: 5px; background: #ddd; -webkit-appearance: none; appearance: none; border-radius: 5px; outline: none; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; background: var(--primary); border-radius: 50%; cursor: pointer; border: 3px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+        input[type=range]::-moz-range-thumb { width: 20px; height: 20px; background: var(--primary); border-radius: 50%; cursor: pointer; border: 3px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+        
+        input[type=number], select { width: 70px; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; text-align: center; background: #f8f9fa; }
+        select { width: 100%; text-align: left; }
+
+        /* V48 UI-REWORK: Hide number inputs on mobile */
+        @media (max-width: 899px) {
+            input[type=number] { display: none; }
+        }
+        
+        .action-bar { display: flex; gap: 10px; margin-top: 15px; }
+        .btn-calc { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; }
+        .btn-calc.secondary { background: #007bff; }
+        .btn-calc:active { transform: translateY(1px); }
+
+        #slider-tooltip {
+            position: fixed;
+            background: #333;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            pointer-events: none;
+            transform: translate(-50%, -150%);
+            display: none;
+            z-index: 101;
+        }
 
         #loader { position: fixed; inset: 0; background: white; z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; }
         .spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; }
@@ -80,15 +114,37 @@
     </style>
 </head>
 <body>
-
+    <div id="slider-tooltip"></div>
     <div id="loader"><div class="spinner"></div><p style="margin-top:10px; color:#666">Loading Physics...</p></div>
 
     <div class="app-container">
+        <!-- PLOT AREA (now first in source for mobile) -->
+        <div class="main-area">
+            <!-- V48 UI-REWORK: Sticky header for mobile -->
+            <div class="mobile-sticky-header">
+                <div id="cheat-sheet-container-sticky">
+                    <div id="cheat-sheet-sticky">Initializing...</div>
+                </div>
+            </div>
+            <div id="cheat-sheet-container" style="display:none;"> <!-- Keep original for desktop -->
+                <div id="cheat-sheet">Initializing Engine...</div>
+            </div>
+
+            <div id="debug-log"></div>
+            <div id="plot-area"></div>
+        </div>
+
         <!-- SIDEBAR -->
         <div class="sidebar">
-            <details>
-                <summary>1. GEAR & TARGETS</summary>
-                <div class="content">
+            <!-- V48 UI-REWORK: Tabs -->
+            <div class="tabs">
+                <button class="tab-button active" data-tab="gear">1. Gear & Targets</button>
+                <button class="tab-button" data-tab="manual">2. Manual Tweaks</button>
+            </div>
+
+            <!-- V48 UI-REWORK: Tab Content -->
+            <div id="gear-tab" class="tab-content active">
+                <div class="widget-card">
                     <div class="control-group">
                         <label>Line Type</label>
                         <select id="w_line">
@@ -160,15 +216,10 @@
                         </div>
                     </div>
                 </div>
-            </details>
-
-            <div class="fab-container">
-                <button id="btn-auto" class="btn-calc">⚡ AUTO-OPTIMIZE PLAN</button>
             </div>
 
-            <details>
-                <summary>2. MANUAL TWEAKS</summary>
-                <div class="content">
+            <div id="manual-tab" class="tab-content">
+                <div class="widget-card">
                     <div class="control-group">
                         <label>Start Speed (cm/s)</label>
                         <div class="input-row">
@@ -215,18 +266,14 @@
                             <input type="number" id="i_trig" value="15" step="1" oninput="s_trig.value=this.value">
                         </div>
                     </div>
-                    <button id="btn-update" class="btn-calc" style="background:#007bff;">Update Graph Only</button>
                 </div>
-            </details>
-        </div>
-
-        <!-- PLOT AREA -->
-        <div class="main-area">
-            <div id="cheat-sheet-container">
-                <div id="cheat-sheet">Initializing Engine...</div>
             </div>
-            <div id="debug-log"></div>
-            <div id="plot-area"></div>
+            
+            <!-- V48 UI-REWORK: Action Bar -->
+            <div class="action-bar">
+                <button id="btn-auto" class="btn-calc">⚡ Auto-Optimize</button>
+                <button id="btn-update" class="btn-calc secondary">Update Graph</button>
+            </div>
         </div>
     </div>
 
@@ -266,7 +313,7 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
         "Nylon":         {"sg": 1.14, "cd": 1.1, "belly": 1.0, "color": "red"}, 
         "Fluorocarbon":  {"sg": 1.78, "cd": 0.9, "belly": -0.6, "color": "blue"}
     }
-    leader_props = {"Nylon": 1.10, "Fluorocarbon": 0.92}
+    leader_props = {"Nylon": 0.05, "Fluorocarbon": -0.05} # Leader AoA effect
     shape_map = {
         "Rodio Craft NOA":     {"Cl": 1.5, "Stall": 18, "SinkFactor": 0.7, "AoA_Sens": 1.8},
         "Forest MIU":          {"Cl": 1.0, "Stall": 28, "SinkFactor": 1.0, "AoA_Sens": 1.0},
@@ -278,7 +325,6 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
     }
     
     props = line_props[line]
-    l_mod = leader_props[leader]
     spoon_data = shape_map[shape_profile]
     spoon_cl = spoon_data["Cl"]
     stall_threshold = spoon_data["Stall"]
@@ -353,23 +399,24 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
         
         spoon_angles.append(np.degrees(geo_angle))
         
-        aoa_factor = 1.0 + (np.sin(geo_angle) * aoa_sensitivity)
+        leader_aoa_mod = 0
+        if d < 1.0: # Leader effect only close to the angler
+            leader_aoa_mod = leader_props[leader]
+        
+        aoa_factor = 1.0 + (np.sin(geo_angle) * aoa_sensitivity) + leader_aoa_mod
         belly_impact = props['belly'] * (d / 25.0) * PHYSICS['belly_tuning'] * ratio_in_water
         effective_angle_sin = np.sin(geo_angle) + belly_impact
         
         delta_rod = (v * dt) * effective_angle_sin
         delta_grav = -effective_sink_rate * dt
         
-        delta_lift = PHYSICS['lift_scale'] * (v**2) * cl_effective * area_lift_scaler * aoa_factor * l_mod * dt
+        delta_lift = PHYSICS['lift_scale'] * (v**2) * cl_effective * area_lift_scaler * aoa_factor * dt
         delta_line_drag = PHYSICS['drag_scale'] * props['cd'] * (v**2) * dia_scale_drag * (d/25.0) * dt * ratio_in_water
         delta_buoy = PHYSICS['buoyancy_scale'] * (1.0 - props['sg']) * dia_scale_vol * (d/25.0) * dt * ratio_in_water
         
-        delta_leader = 0
-        if d < 1.0: 
-            if leader == "Fluorocarbon": delta_leader = -PHYSICS['leader_lift'] * dt
-            else: delta_leader = PHYSICS['leader_lift'] * dt
+        delta_leader = 0 # This is now handled in AoA
         
-        current_depth += (delta_rod + delta_grav + delta_lift + delta_line_drag + delta_buoy + delta_leader)
+        current_depth += (delta_rod + delta_grav + delta_lift + delta_line_drag + delta_buoy)
         if current_depth > 0: current_depth = 0
         y.append(current_depth)
         
@@ -399,7 +446,7 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
             for s_depth in start_depths:
                 for trig_pct in [0.6, 0.8]:
                     trigger_dist = dist * trig_pct
-                    # Correct unpacking
+                    # Correct unpacking (7 return values)
                     x, y, _, _, _, _, _ = calculate_physics_data(
                         dist, s_depth, line, diameter, leader, r_s, r_e, r_dyn, trigger_dist, 
                         spd_s, spd_e, trigger_dist, weight, shape, 
@@ -454,13 +501,32 @@ def update_plot(event=None):
             spd_s, spd_e, trigger, weight, shape, steps=150, bottom_limit=p_bot
         )
 
-        is_mobile = window.innerWidth < 900
-        fig_size = (5, 9) if is_mobile else (10, 6)
+        # DYNAMIC WIDTH CALCULATION (Inches)
+        # Get actual pixel width of the plot container
+        plot_div = document.getElementById("plot-area")
+        px_width = plot_div.clientWidth
+        
+        # Max limit 1080px to avoid stretch
+        if px_width > 1080: px_width = 1080
+        
+        # Convert to inches (approx 100 DPI)
+        fig_width_in = px_width / 100.0
+        
+        # Determine aspect ratio
+        if px_width < 600:
+             # Mobile: Portrait (Height is 1.6x width)
+             fig_height_in = fig_width_in * 1.6
+             if fig_height_in > 10: fig_height_in = 10
+        else:
+             # Desktop: Landscape (Height is 0.6x width)
+             fig_height_in = fig_width_in * 0.6
         
         plt.close('all')
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=fig_size, gridspec_kw={'height_ratios': [3, 1]})
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(fig_width_in, fig_height_in), dpi=100, gridspec_kw={'height_ratios': [3, 1]})
         
-        if is_mobile: plt.subplots_adjust(left=0.12, right=0.98, bottom=0.05, top=0.98)
+        is_mobile = window.innerWidth < 900
+        # Adjusted margins for better fit with dynamic sizing
+        if is_mobile: plt.subplots_adjust(left=0.15, right=0.98, bottom=0.08, top=0.95)
         else: plt.subplots_adjust(left=0.08, right=0.95, bottom=0.1, top=0.95)
 
         ax1.add_patch(patches.Rectangle((-5, -7), 60, 7, color='deepskyblue', alpha=0.1))
@@ -496,6 +562,7 @@ def update_plot(event=None):
         lines_2, labels_2 = ax3.get_legend_handles_labels()
         ax2.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', fontsize='x-small')
         
+        # Attitude
         step = 8
         q_x = x[::step]
         q_y = speeds[::step]
@@ -512,7 +579,7 @@ def update_plot(event=None):
         in_zone = [val for val in y if abs(val - target) <= 0.3]
         pct = (len(in_zone) / len(y)) * 100
         
-        # Clean Single-Quote Strings
+        # V46 FIX: Safe String + One Border
         sheet_html = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">'
         sheet_html += f'<span style="font-weight:bold; font-size:1.1rem">🎯 Score: {pct:.0f}%</span>'
         sheet_html += f'<span style="color:#666">Reel: {reel_cm}cm</span></div>'
@@ -522,8 +589,13 @@ def update_plot(event=None):
         sheet_html += '<div style="background-color:#fff3cd; padding:5px; margin:5px 0; border-radius:4px;">'
         sheet_html += f'<b>⚡ TRIGGER:</b> {rod_action} + Slow ({int(spd_e)} cm/s)</div>'
         sheet_html += f'4. Reel <b>{cranks_2:.1f}x</b> to finish.'
-        
+
+        # V48 UI-REWORK: Update both normal and sticky cheat sheets
         document.getElementById("cheat-sheet").innerHTML = sheet_html
+        # The sticky one is a clone, find it by its new ID.
+        sticky_sheet = document.getElementById("cheat-sheet-sticky")
+        if sticky_sheet: sticky_sheet.innerHTML = sheet_html
+
         display(fig, target="plot-area", append=False)
         
     except Exception as e:
@@ -551,6 +623,60 @@ def run_auto_tune_handler(*args):
 def update_plot_handler(*args):
     update_plot()
 
+# --- V48 UI-REWORK: JAVASCRIPT HELPERS ---
+def setup_ui_listeners():
+    # Tab switching
+    tabs = document.querySelectorAll('.tab-button')
+    tab_contents = document.querySelectorAll('.tab-content')
+    
+    def switch_tab(e):
+        for tab in tabs: tab.classList.remove('active')
+        e.target.classList.add('active')
+        
+        for content in tab_contents: content.classList.remove('active')
+        document.getElementById(e.target.dataset.tab + '-tab').classList.add('active')
+
+    for tab in tabs:
+        tab.addEventListener('click', create_proxy(switch_tab))
+
+    # Slider tooltip
+    sliders = document.querySelectorAll('input[type=range]')
+    tooltip = document.getElementById('slider-tooltip')
+
+    def show_tooltip(e):
+        tooltip.style.display = 'block'
+        update_tooltip(e)
+    
+    def hide_tooltip(e):
+        tooltip.style.display = 'none'
+
+    def update_tooltip(e):
+        slider = e.target
+        rect = slider.getBoundingClientRect()
+        thumb_pos = (slider.value - slider.min) / (slider.max - slider.min)
+        px_pos = rect.left + (thumb_pos * rect.width)
+        
+        tooltip.style.left = f'{px_pos}px'
+        tooltip.style.top = f'{rect.top}px'
+        tooltip.innerHTML = slider.value
+    
+    for slider in sliders:
+        slider.addEventListener('input', create_proxy(update_tooltip))
+        slider.addEventListener('mousedown', create_proxy(show_tooltip))
+        slider.addEventListener('mouseup', create_proxy(hide_tooltip))
+        slider.addEventListener('touchstart', create_proxy(show_tooltip))
+        slider.addEventListener('touchend', create_proxy(hide_tooltip))
+
+# --- V49 RESIZE FIX ---
+_debounce_timer = None
+def debounce_update_plot(e=None):
+    global _debounce_timer
+    if _debounce_timer:
+        window.clearTimeout(_debounce_timer)
+    
+    # Using a proxy for the inner function that will be called by setTimeout
+    _debounce_timer = window.setTimeout(create_proxy(update_plot), 150)
+
 # --- BINDING HELPERS ---
 update_proxy = create_proxy(update_plot)
 auto_proxy = create_proxy(run_auto_tune_handler)
@@ -559,7 +685,20 @@ def bind_listeners():
     document.getElementById("btn-auto").addEventListener("click", auto_proxy)
     document.getElementById("btn-update").addEventListener("click", update_proxy)
     
-    # Bind Inputs
+    # V49 RESIZE FIX: Add listener for window resize
+    window.addEventListener('resize', create_proxy(debounce_update_plot))
+
+    # Clone cheat sheet container for sticky header
+    original_container = document.getElementById("cheat-sheet-container")
+    sticky_container = document.getElementById("cheat-sheet-container-sticky")
+    if original_container and sticky_container:
+        # Clone the #cheat-sheet div itself and give the clone a new ID
+        original_sheet = original_container.querySelector("#cheat-sheet")
+        cloned_sheet = original_sheet.cloneNode(True)
+        cloned_sheet.id = "cheat-sheet-sticky"
+        sticky_container.innerHTML = '' # Clear "Initializing..."
+        sticky_container.appendChild(cloned_sheet)
+
     input_ids = [
         "w_line", "w_leader", "w_shape", 
         "s_weight", "i_weight",
@@ -584,6 +723,7 @@ def bind_listeners():
             if el.type == "range": el.addEventListener("input", update_proxy)
 
 bind_listeners()
+setup_ui_listeners() # V48 UI-REWORK: Call the new UI setup
 document.getElementById("loader").style.display = "none"
 update_plot()
     </py-script>
