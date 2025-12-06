@@ -92,6 +92,7 @@
         @media (max-width: 899px) {
             .mobile-sticky-header { display: block; }
             .main-area { padding-top: 0; }
+            #cheat-sheet-container { display: none; }
         }
 
         /* WIDGETS */
@@ -160,9 +161,9 @@
             </div>
             <!-- V48 UI-REWORK: Tabs -->
             <div class="tabs">
-                <button class="tab-button active" data-tab="gear">1. Gear & Targets</button>
-                <button class="tab-button" data-tab="manual">2. Manual Tweaks</button>
-                <button class="tab-button" data-tab="strategy">3. Strategy</button>
+                <button class="tab-button active" data-tab="gear">Gear & Targets</button>
+                <button class="tab-button" data-tab="manual">Manual Tweaks</button>
+                <button class="tab-button" data-tab="strategy">Colour Strategy</button>
             </div>
 
             <!-- V48 UI-REWORK: Tab Content -->
@@ -294,6 +295,7 @@
             
             <div id="strategy-tab" class="tab-content">
                 <div class="widget-card">
+                    <div id="color-strategy-plan"></div>
                     <div class="control-group">
                         <label>Water Clarity</label>
                         <select id="w_clarity">
@@ -324,6 +326,14 @@
                             <option value="Sand">Sand/Light Gravel</option>
                             <option value="Mud">Mud/Silt (Dark)</option>
                             <option value="Weedbed">Weedbed (Green)</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Wind Condition</label>
+                        <select id="w_wind">
+                            <option value="Calm">Calm</option>
+                            <option value="Breeze">Light Breeze</option>
+                            <option value="Strong">Strong Wind</option>
                         </select>
                     </div>
                     <div id="color-preview-container"></div>
@@ -454,9 +464,7 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
         
         spoon_angles.append(np.degrees(geo_angle))
         
-        leader_aoa_mod = 0
-        if d < 1.0: # Leader effect only close to the angler
-            leader_aoa_mod = leader_props[leader]
+        leader_aoa_mod = leader_props[leader]
         
         aoa_factor = 1.0 + (np.sin(geo_angle) * aoa_sensitivity) + leader_aoa_mod
         belly_impact = props['belly'] * (d / 25.0) * PHYSICS['belly_tuning'] * ratio_in_water
@@ -469,9 +477,10 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
         delta_line_drag = PHYSICS['drag_scale'] * props['cd'] * (v**2) * dia_scale_drag * (d/25.0) * dt * ratio_in_water
         delta_buoy = PHYSICS['buoyancy_scale'] * (1.0 - props['sg']) * dia_scale_vol * (d/25.0) * dt * ratio_in_water
         
-        delta_leader = 0 # This is now handled in AoA
+        wind_factor = {'Calm': 0.0, 'Breeze': 0.005, 'Strong': 0.02}
+        wind_lift = wind_factor.get(get_val("w_wind"), 0.0) * (d / dist) * ratio_air * dt
         
-        current_depth += (delta_rod + delta_grav + delta_lift + delta_line_drag + delta_buoy)
+        current_depth += (delta_rod + delta_grav + delta_lift + delta_line_drag + delta_buoy + wind_lift)
         if current_depth > 0: current_depth = 0
         y.append(current_depth)
         
@@ -483,7 +492,6 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
     best_params = {}
 
     profiles = []
-    # V50 SLOWER OPTIMIZER: Added more, slower profiles
     if weight >= 2.0:
         if line == "PE (Braid)": profiles = [(80, 50), (70, 40), (60, 30), (90, 60)]
         else: profiles = [(120, 80), (100, 70), (90, 60), (80, 50), (70, 40)]
@@ -502,7 +510,7 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
             for s_depth in start_depths:
                 for trig_pct in [0.6, 0.8]:
                     trigger_dist = dist * trig_pct
-                    # Correct unpacking (7 return values)
+                    
                     x, y, _, _, _, _, _ = calculate_physics_data(
                         dist, s_depth, line, diameter, leader, r_s, r_e, r_dyn, trigger_dist, 
                         spd_s, spd_e, trigger_dist, weight, shape, 
@@ -516,8 +524,10 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
                         tolerance = 0.3 
                         in_zone = [val for val in y if abs(val - target) <= tolerance]
                         score = (len(in_zone) / len(y)) * 100
-                        # V50 SLOWER OPTIMIZER: Increased speed penalty significantly
-                        score -= (spd_s * 0.2) 
+                        score -= (spd_s * 0.2)
+                        
+                        if get_val("w_wind") == "Strong" and r_s > 0.5:
+                            score -= 50 # Heavy penalty for high rod in wind
 
                     if score > best_score:
                         best_score = score
@@ -553,7 +563,6 @@ def update_plot(event=None):
         rod_dyn = get_val("w_rod_dyn"); rod_s = get_val("s_rod_s"); rod_e = get_val("s_rod_e")
         p_bot = -pond_depth
         
-        # V55 DYNAMIC PALETTE
         water_color_name = get_val("w_water_color")
         bottom_name = get_val("w_bottom")
         palette = get_palette(water_color_name, bottom_name)
@@ -563,27 +572,17 @@ def update_plot(event=None):
             spd_s, spd_e, trigger, weight, shape, steps=150, bottom_limit=p_bot
         )
 
-        # DYNAMIC WIDTH CALCULATION (Inches)
         is_mobile = window.innerWidth < 900
         plot_div = document.getElementById("plot-area")
         px_width = plot_div.clientWidth
         
-        # Convert to inches (approx 100 DPI)
         fig_width_in = px_width / 100.0
-        
-        # Determine aspect ratio
-        if is_mobile:
-             # Mobile: Portrait (Height is 1.2x width)
-             fig_height_in = fig_width_in * 1.2
-        else:
-             # Desktop: Landscape (Height is 0.6x width)
-             fig_height_in = fig_width_in * 0.6
+        fig_height_in = fig_width_in * 1.2 if is_mobile else fig_width_in * 0.6
         
         plt.close('all')
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(fig_width_in, fig_height_in), dpi=100, gridspec_kw={'height_ratios': [3, 1]})
 
-        # Adjusted margins for better fit with dynamic sizing
-        if is_mobile: plt.subplots_adjust(left=0.13, right=0.99, bottom=0.08, top=0.95)
+        if is_mobile: plt.subplots_adjust(left=0.08, right=0.99, bottom=0.08, top=0.95)
         else: plt.subplots_adjust(left=0.08, right=0.95, bottom=0.1, top=0.95)
 
         ax1.add_patch(patches.Rectangle((-5, p_bot - 2), 60, p_bot + 9, color=palette['water'], alpha=0.2))
@@ -594,15 +593,13 @@ def update_plot(event=None):
         ax1.plot(x, y, color=color, linewidth=3, label=line)
         ax1.axvline(trigger, color='purple', linestyle='--', alpha=0.5)
         
-        # V50-2 Angler graphic
-        rod_wrist_x = -1.2
-        rod_wrist_y = 1.0
+        rod_wrist_x = -1.2; rod_wrist_y = 1.0
         ax1.add_patch(patches.Rectangle((-3, -0.5), 3, 0.5, color=palette['land'], alpha=0.6)) # Land
         ax1.plot([-1.5, -1.5], [0.8, 1.5], 'k', lw=3)
         ax1.plot([-1.8, -1.5, -1.2], [0, 0.8, 0], 'k', lw=2)
         ax1.add_patch(patches.Circle((-1.5, 1.75), 0.25, color='k'))
-        ax1.plot([-1.5, rod_wrist_x], [1.3, rod_wrist_y], 'k', lw=3) # Arm
-        ax1.plot([rod_wrist_x, 0], [rod_wrist_y, rod_s], 'k', lw=3) # Rod
+        ax1.plot([-1.5, rod_wrist_x], [1.3, rod_wrist_y], 'k', lw=3)
+        ax1.plot([rod_wrist_x, 0], [rod_wrist_y, rod_s], 'k', lw=3)
         if rod_dyn: ax1.plot([rod_wrist_x, 0], [rod_wrist_y, rod_e], 'gray', ls=':')
             
         if init_geo:
@@ -610,8 +607,7 @@ def update_plot(event=None):
             ax1.plot([init_geo['entry_x'], init_geo['spoon_x']], [0, init_geo['spoon_y']], 'gray', ls='-', lw=1)
 
         ax1.set_ylim(-4.5, 2.5); ax1.set_xlim(dist+3, -3)
-        ax1.set_ylabel("") 
-        ax1.legend(loc='upper left', fontsize='small')
+        ax1.set_ylabel(""); ax1.legend(loc='upper left', fontsize='small')
         ax1.grid(True, alpha=0.5, ls='--')
         
         ax2.plot(x, speeds, color='purple', lw=2, label="Speed")
@@ -624,14 +620,9 @@ def update_plot(event=None):
         lines_2, labels_2 = ax3.get_legend_handles_labels()
         ax2.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', fontsize='x-small')
         
-        # Attitude
-        step = 8
-        q_x = x[::step]
-        q_y = speeds[::step]
-        q_ang = np.array(angles)[::step]
-        rads = np.radians(q_ang)
-        u = np.cos(rads)
-        v = np.sin(rads)
+        step = 8; q_x = x[::step]; q_y = speeds[::step]
+        q_ang = np.array(angles)[::step]; rads = np.radians(q_ang)
+        u, v = np.cos(rads), np.sin(rads)
         ax2.quiver(q_x, q_y, u, v, scale=30, width=0.005, headaxislength=0, headlength=0, pivot='mid', color='black')
 
         cranks_1 = ((dist - trigger) * 100) / reel_cm
@@ -641,24 +632,20 @@ def update_plot(event=None):
         in_zone = [val for val in y if abs(val - target) <= 0.3]
         pct = (len(in_zone) / len(y)) * 100
         
-        # V46 FIX: Safe String + One Border
-        sheet_html = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">'
-        sheet_html += f'<span style="font-weight:bold; font-size:1.1rem">🎯 Score: {pct:.0f}%</span>'
-        sheet_html += f'<span style="color:#666">Reel: {reel_cm}cm</span></div>'
-        sheet_html += '<hr style="border:0; border-top:1px solid #ccc; margin:5px 0;">'
-        sheet_html += f'1. Cast <b>{dist}m</b>. Sink to <b>{start_depth}m</b>.<br>'
-        sheet_html += f'2. <b>HOLD ROD {rod_s}m.</b> Reel <b>{cranks_1:.1f}x</b> ({int(spd_s)} cm/s)<br>'
-        sheet_html += '<div style="background-color:#fff3cd; padding:5px; margin:5px 0; border-radius:4px;">'
-        sheet_html += f'<b>⚡ TRIGGER:</b> {rod_action} + Slow ({int(spd_e)} cm/s)</div>'
-        sheet_html += f'4. Reel <b>{cranks_2:.1f}x</b> to finish.'
+        sheet_html = f'''<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                         <span style="font-weight:bold; font-size:1.1rem">🎯 Score: {pct:.0f}%</span>
+                         <span style="color:#666">Reel: {reel_cm}cm</span></div>
+                         <hr style="border:0; border-top:1px solid #ccc; margin:5px 0;">
+                         1. Cast <b>{dist}m</b>. Sink to <b>{start_depth}m</b>.<br>
+                         2. <b>HOLD ROD {rod_s}m.</b> Reel <b>{cranks_1:.1f}x</b> ({int(spd_s)} cm/s)<br>
+                         <div style="background-color:#fff3cd; padding:5px; margin:5px 0; border-radius:4px;">
+                         <b>⚡ TRIGGER:</b> {rod_action} + Slow ({int(spd_e)} cm/s)</div>
+                         4. Reel <b>{cranks_2:.1f}x</b> to finish.'''
         
-        # V52 COLOR STRATEGY
-        clarity = get_val("w_clarity")
-        light = get_val("w_light")
+        clarity = get_val("w_clarity"); light = get_val("w_light")
         all_scores, warnings = recommend_colors(clarity, light, target_depth, bottom_name)
         
         strategy_html = '<div id="color-strategy"><b>Color Strategy:</b><ul style="margin:5px 0 0 15px; padding:0; list-style-type: none;">'
-        
         top_recs = [item for item in all_scores if item[1] > 0][:3]
 
         for i, (color, score) in enumerate(top_recs):
@@ -669,25 +656,21 @@ def update_plot(event=None):
             if target_depth > 3.5 and color == "Blue": reason = "Deep water penetration"
             strategy_html += f'<li><b>{i+1}. {color}:</b> {reason}</li>'
         
-        if warnings:
-            strategy_html += '<li style="margin-top:5px;">⚠️ <b>Avoid:</b> ' + ", ".join(warnings) + '</li>'
-            
+        if warnings: strategy_html += '<li style="margin-top:5px;">⚠️ <b>Avoid:</b> ' + ", ".join(warnings) + '</li>'
         strategy_html += '</ul></div>'
         
-        # Combine and update
-        final_html = sheet_html + strategy_html
+        final_html = sheet_html
         document.getElementById("cheat-sheet").innerHTML = final_html
-        # The sticky one is a clone, find it by its new ID.
+        document.getElementById("color-strategy-plan").innerHTML = strategy_html
+
         sticky_sheet = document.getElementById("cheat-sheet-sticky")
         if sticky_sheet: sticky_sheet.innerHTML = final_html
 
-        # V54 COLOR PREVIEW
         update_color_previews(target_depth, clarity, all_scores)
 
         display(fig, target="plot-area", append=False)
         
-    except Exception as e:
-        log_error(e)
+    except Exception as e: log_error(e)
 
 # V55 ADVANCED COLOR ENGINE
 class Color:
@@ -701,13 +684,10 @@ class Color:
     def get_perceived_rgb(self, depth, clarity):
         clarity_factor = {"Clear": 1.0, "Stained": 1.5, "Turbid": 2.5}
         effective_depth = depth * clarity_factor.get(clarity, 1.0)
-        
         absorption_factor = min(1.0, effective_depth / self.max_depth_m)
-
         r = int(self.surface_rgb[0] * (1 - absorption_factor) + self.deep_rgb[0] * absorption_factor)
         g = int(self.surface_rgb[1] * (1 - absorption_factor) + self.deep_rgb[1] * absorption_factor)
         b = int(self.surface_rgb[2] * (1 - absorption_factor) + self.deep_rgb[2] * absorption_factor)
-        
         return (r, g, b)
 
     def get_perceived_hex(self, depth, clarity):
@@ -732,32 +712,25 @@ def get_palette(water_color_name, bottom_name):
 
 def recommend_colors(clarity, light, depth, bottom):
     scores = {c.name: 0 for c in COLOR_PALETTE}
-    
     if clarity == "Clear": scores["Silver"] += 3; scores["Natural"] += 2; scores["Pink"] += 1
     elif clarity == "Stained": scores["Gold"] += 3; scores["Chartreuse"] += 2; scores["Copper"] += 1
     else: scores["Chartreuse"] += 3; scores["White"] += 2; scores["Black"] += 2
-        
     if light == "Bright": scores["Silver"] += 2; scores["Gold"] += 1
     elif light == "Overcast": scores["Gold"] += 2; scores["Chartreuse"] += 2; scores["White"] += 1
     else: scores["Chartreuse"] += 3; scores["Black"] += 3; scores["White"] += 2
-        
     warnings = []
     for color_obj in COLOR_PALETTE:
         if depth > color_obj.max_depth_m:
             scores[color_obj.name] -= 10
             if color_obj.name not in warnings: warnings.append(color_obj.name)
-    
-    if bottom in ["Mud", "Weedbed"]:
-        scores["White"] += 2; scores["Chartreuse"] += 2; scores["Silver"] += 1
+    if bottom in ["Mud", "Weedbed"]: scores["White"] += 2; scores["Chartreuse"] += 2; scores["Silver"] += 1
     else: scores["Black"] += 3; scores["Copper"] += 1
-
     return sorted(scores.items(), key=lambda item: item[1], reverse=True), warnings
 
 def update_color_previews(depth, clarity, all_scores):
     preview_container = document.getElementById("color-preview-container")
     html = "<b>Color Previews at Depth</b>"
     score_map = dict(all_scores)
-    
     for color_obj in sorted(COLOR_PALETTE, key=lambda c: score_map.get(c.name, 0), reverse=True):
         perceived_hex = color_obj.get_perceived_hex(depth, clarity)
         score = score_map.get(color_obj.name, 0)
@@ -777,9 +750,7 @@ def run_auto_tune_handler(*args):
         dist = get_val("s_dist"); target = get_val("s_target"); wt = get_val("s_weight")
         shape = get_val("w_shape"); dia = get_val("s_dia"); leader = get_val("w_leader")
         line = get_val("w_line"); pond = -get_val("s_pond")
-        
         res = optimize_technique(dist, target, wt, shape, dia, leader, line, pond)
-        
         if res:
             set_val("s_spd_s", int(res['spd_s'])); set_val("s_spd_e", int(res['spd_e']))
             set_val("s_rod_s", res['rod_s']); set_val("s_rod_e", res['rod_e'])
@@ -788,8 +759,7 @@ def run_auto_tune_handler(*args):
             update_plot_handler(None)
         else:
             document.getElementById("cheat-sheet").innerHTML = "<b>❌ SETUP IMPOSSIBLE. CHANGE GEAR.</b>"
-    except Exception as e:
-        log_error(e)
+    except Exception as e: log_error(e)
 
 def update_plot_handler(*args):
     update_plot()
@@ -799,38 +769,30 @@ def setup_ui_listeners():
     # Tab switching
     tabs = document.querySelectorAll('.tab-button')
     tab_contents = document.querySelectorAll('.tab-content')
-    
     def switch_tab(e):
         for tab in tabs: tab.classList.remove('active')
         e.target.classList.add('active')
-        
         for content in tab_contents: content.classList.remove('active')
         document.getElementById(e.target.dataset.tab + '-tab').classList.add('active')
-
     for tab in tabs:
         tab.addEventListener('click', create_proxy(switch_tab))
 
     # Slider tooltip
     sliders = document.querySelectorAll('input[type=range]')
     tooltip = document.getElementById('slider-tooltip')
-
     def show_tooltip(e):
         tooltip.style.display = 'block'
         update_tooltip(e)
-    
     def hide_tooltip(e):
         tooltip.style.display = 'none'
-
     def update_tooltip(e):
         slider = e.target
         rect = slider.getBoundingClientRect()
         thumb_pos = (slider.value - slider.min) / (slider.max - slider.min)
         px_pos = rect.left + (thumb_pos * rect.width)
-        
         tooltip.style.left = f'{px_pos}px'
         tooltip.style.top = f'{rect.top}px'
         tooltip.innerHTML = slider.value
-    
     for slider in sliders:
         slider.addEventListener('input', create_proxy(update_tooltip))
         slider.addEventListener('mousedown', create_proxy(show_tooltip))
@@ -844,8 +806,6 @@ def debounce_update_plot(e=None):
     global _debounce_timer
     if _debounce_timer:
         window.clearTimeout(_debounce_timer)
-    
-    # Using a proxy for the inner function that will be called by setTimeout
     _debounce_timer = window.setTimeout(create_proxy(update_plot), 150)
 
 # --- BINDING HELPERS ---
@@ -857,50 +817,38 @@ def bind_listeners():
     document.getElementById("btn-auto").addEventListener("click", auto_proxy)
     document.getElementById("btn-update").addEventListener("click", update_proxy)
     
-    # V49 RESIZE FIX: Add listener for window resize
     window.addEventListener('resize', debounce_proxy)
 
-    # Clone cheat sheet container for sticky header
     original_container = document.getElementById("cheat-sheet-container")
     sticky_container = document.getElementById("cheat-sheet-container-sticky")
     if original_container and sticky_container:
-        # Clone the #cheat-sheet div itself and give the clone a new ID
         original_sheet = original_container.querySelector("#cheat-sheet")
         cloned_sheet = original_sheet.cloneNode(True)
         cloned_sheet.id = "cheat-sheet-sticky"
-        sticky_container.innerHTML = '' # Clear "Initializing..."
+        sticky_container.innerHTML = ''
         sticky_container.appendChild(cloned_sheet)
 
     input_ids = [
         "w_line", "w_leader", "w_shape", 
-        "s_weight", "i_weight",
-        "s_dia", "i_dia",
-        "s_reel", "i_reel",
-        "s_dist", "i_dist",
-        "s_target", "i_target",
-        "s_pond", "i_pond",
-        "s_start_d", "i_start_d",
-        "s_trig", "i_trig",
-        "s_spd_s", "i_spd_s",
-        "s_spd_e", "i_spd_e",
-        "s_rod_s", "i_rod_s",
-        "s_rod_e", "i_rod_e",
-        "w_rod_dyn",
-        "w_clarity", "w_light", "w_water_color", "w_bottom"
+        "s_weight", "i_weight", "s_dia", "i_dia", "s_reel", "i_reel",
+        "s_dist", "i_dist", "s_target", "i_target", "s_pond", "i_pond",
+        "s_start_d", "i_start_d", "s_trig", "i_trig",
+        "s_spd_s", "i_spd_s", "s_spd_e", "i_spd_e",
+        "s_rod_s", "i_rod_s", "s_rod_e", "i_rod_e", "w_rod_dyn",
+        "w_clarity", "w_light", "w_water_color", "w_bottom", "w_wind"
     ]
     
     for id in input_ids:
         el = document.getElementById(id)
         if el:
-            # Use debounce for sliders to avoid choppiness
             if el.type == "range":
                 el.addEventListener("input", debounce_proxy)
-                el.addEventListener("change", update_proxy) # Update once on release
+                el.addEventListener("change", update_proxy)
             else:
                 el.addEventListener("change", update_proxy)
 
 bind_listeners()
-setup_ui_listeners() # V48 UI-REWORK: Call the new UI setup
+setup_ui_listeners()
 document.getElementById("loader").style.display = "none"
 update_plot()
     </py-script>
