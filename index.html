@@ -44,6 +44,22 @@
             border-radius: 4px;
             font-size: 0.85rem;
         }
+        #color-preview-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .color-swatch {
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 0.8rem;
+            padding-bottom: 5px;
+            overflow: hidden;
+        }
+        .swatch-pair { display: flex; height: 40px; }
+        .swatch { width: 50%; }
 
         /* CONTROLS */
         .sidebar { order: 2; padding: 15px; background: var(--bg); padding-bottom: 80px; }
@@ -275,7 +291,7 @@
                     </div>
                 </div>
             </div>
-
+            
             <div id="strategy-tab" class="tab-content">
                 <div class="widget-card">
                     <div class="control-group">
@@ -294,6 +310,23 @@
                             <option value="Dusk/Dawn">Dusk / Dawn</option>
                         </select>
                     </div>
+                    <div class="control-group">
+                        <label>Water Color</label>
+                        <select id="w_water_color">
+                            <option value="Clear">Clear (Blue Tint)</option>
+                            <option value="Stained">Stained (Tea/Brown Tint)</option>
+                            <option value="Algae">Algae (Green Tint)</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Bottom Type</label>
+                        <select id="w_bottom">
+                            <option value="Sand">Sand/Light Gravel</option>
+                            <option value="Mud">Mud/Silt (Dark)</option>
+                            <option value="Weedbed">Weedbed (Green)</option>
+                        </select>
+                    </div>
+                    <div id="color-preview-container"></div>
                 </div>
             </div>
         </div>
@@ -519,6 +552,11 @@ def update_plot(event=None):
         spd_s = get_val("s_spd_s"); spd_e = get_val("s_spd_e")
         rod_dyn = get_val("w_rod_dyn"); rod_s = get_val("s_rod_s"); rod_e = get_val("s_rod_e")
         p_bot = -pond_depth
+        
+        # V55 DYNAMIC PALETTE
+        water_color_name = get_val("w_water_color")
+        bottom_name = get_val("w_bottom")
+        palette = get_palette(water_color_name, bottom_name)
 
         x, y, speeds, color, init_geo, rod_heights, angles = calculate_physics_data(
             dist, start_depth, line, dia, leader, rod_s, rod_e, rod_dyn, trigger,
@@ -536,21 +574,22 @@ def update_plot(event=None):
         # Determine aspect ratio
         if is_mobile:
              # Mobile: Portrait (Height is 1.2x width)
-             fig_height_in = fig_width_in * 1
+             fig_height_in = fig_width_in * 1.2
         else:
              # Desktop: Landscape (Height is 0.6x width)
-             fig_height_in = fig_width_in * 0.8
+             fig_height_in = fig_width_in * 0.6
         
         plt.close('all')
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(fig_width_in, fig_height_in), dpi=100, gridspec_kw={'height_ratios': [3, 1]})
 
         # Adjusted margins for better fit with dynamic sizing
-        plt.subplots_adjust(left=0.06, right=0.98, bottom=0.1, top=0.95)
+        if is_mobile: plt.subplots_adjust(left=0.13, right=0.99, bottom=0.08, top=0.95)
+        else: plt.subplots_adjust(left=0.08, right=0.95, bottom=0.1, top=0.95)
 
-        ax1.add_patch(patches.Rectangle((-5, -7), 60, 7, color='deepskyblue', alpha=0.1))
-        ax1.add_patch(patches.Rectangle((0, -target_depth-0.3), dist+4, 0.6, color='limegreen', alpha=0.3, label='Target'))
+        ax1.add_patch(patches.Rectangle((-5, p_bot - 2), 60, p_bot + 9, color=palette['water'], alpha=0.2))
+        ax1.add_patch(patches.Rectangle((0, -target_depth-0.3), dist+4, 0.6, color=palette['target'], alpha=0.3, label='Target'))
         ax1.axhline(0, color='dodgerblue', linewidth=2)
-        ax1.axhline(p_bot, color='sienna', linewidth=3)
+        ax1.axhline(p_bot, color=palette['bottom'], linewidth=3)
         
         ax1.plot(x, y, color=color, linewidth=3, label=line)
         ax1.axvline(trigger, color='purple', linestyle='--', alpha=0.5)
@@ -558,7 +597,7 @@ def update_plot(event=None):
         # V50-2 Angler graphic
         rod_wrist_x = -1.2
         rod_wrist_y = 1.0
-        ax1.add_patch(patches.Rectangle((-3, -0.5), 3, 0.5, color='#28a745', alpha=0.6)) # Land
+        ax1.add_patch(patches.Rectangle((-3, -0.5), 3, 0.5, color=palette['land'], alpha=0.6)) # Land
         ax1.plot([-1.5, -1.5], [0.8, 1.5], 'k', lw=3)
         ax1.plot([-1.8, -1.5, -1.2], [0, 0.8, 0], 'k', lw=2)
         ax1.add_patch(patches.Circle((-1.5, 1.75), 0.25, color='k'))
@@ -616,10 +655,18 @@ def update_plot(event=None):
         # V52 COLOR STRATEGY
         clarity = get_val("w_clarity")
         light = get_val("w_light")
-        recommendations, warnings = recommend_colors(clarity, light, target_depth)
+        all_scores, warnings = recommend_colors(clarity, light, target_depth, bottom_name)
         
         strategy_html = '<div id="color-strategy"><b>Color Strategy:</b><ul style="margin:5px 0 0 15px; padding:0; list-style-type: none;">'
-        for i, (color, reason) in enumerate(recommendations):
+        
+        top_recs = [item for item in all_scores if item[1] > 0][:3]
+
+        for i, (color, score) in enumerate(top_recs):
+            reason = "High contrast" if color in ["Black", "White"] else "High visibility"
+            if clarity == "Clear" and color in ["Natural", "Silver"]: reason = "Natural imitation"
+            if light == "Overcast" and color == "Gold": reason = "Bright in low light"
+            if light == "Dusk/Dawn" and color == "Chartreuse": reason = "Fluorescent advantage"
+            if target_depth > 3.5 and color == "Blue": reason = "Deep water penetration"
             strategy_html += f'<li><b>{i+1}. {color}:</b> {reason}</li>'
         
         if warnings:
@@ -634,87 +681,96 @@ def update_plot(event=None):
         sticky_sheet = document.getElementById("cheat-sheet-sticky")
         if sticky_sheet: sticky_sheet.innerHTML = final_html
 
+        # V54 COLOR PREVIEW
+        update_color_previews(target_depth, clarity, all_scores)
+
         display(fig, target="plot-area", append=False)
         
     except Exception as e:
         log_error(e)
 
-# --- V53 ADVANCED COLOR STRATEGY ENGINE ---
-def recommend_colors(clarity, light, depth):
-    scores = {
-        "Silver": 0, "Gold": 0, "Copper": 0, "Chartreuse": 0,
-        "Black": 0, "White": 0, "Pink/Red": 0, "Orange": 0,
-        "Blue": 0, "Green/Olive": 0, "Natural": 0
+# V55 ADVANCED COLOR ENGINE
+class Color:
+    def __init__(self, name, surface_hex, deep_hex, max_depth_m):
+        self.name = name
+        self.surface_hex = surface_hex
+        self.surface_rgb = tuple(int(surface_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+        self.deep_rgb = tuple(int(deep_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+        self.max_depth_m = max_depth_m
+
+    def get_perceived_rgb(self, depth, clarity):
+        clarity_factor = {"Clear": 1.0, "Stained": 1.5, "Turbid": 2.5}
+        effective_depth = depth * clarity_factor.get(clarity, 1.0)
+        
+        absorption_factor = min(1.0, effective_depth / self.max_depth_m)
+
+        r = int(self.surface_rgb[0] * (1 - absorption_factor) + self.deep_rgb[0] * absorption_factor)
+        g = int(self.surface_rgb[1] * (1 - absorption_factor) + self.deep_rgb[1] * absorption_factor)
+        b = int(self.surface_rgb[2] * (1 - absorption_factor) + self.deep_rgb[2] * absorption_factor)
+        
+        return (r, g, b)
+
+    def get_perceived_hex(self, depth, clarity):
+        r, g, b = self.get_perceived_rgb(depth, clarity)
+        return f'#{r:02x}{g:02x}{b:02x}'
+
+COLOR_PALETTE = [
+    Color("Red", "#FF0000", "#301010", 7.5), Color("Orange", "#FFA500", "#302010", 10.0),
+    Color("Pink", "#FFC0CB", "#403030", 7.5), Color("Chartreuse", "#DFFF00", "#607000", 20.0),
+    Color("Gold", "#FFD700", "#615300", 20.0), Color("Silver", "#C0C0C0", "#80bfff", 30.0),
+    Color("Blue", "#0000FF", "#00008B", 33.0), Color("Green", "#008000", "#003000", 24.0),
+    Color("White", "#FFFFFF", "#A0A0A0", 30.0), Color("Black", "#000000", "#000000", 30.0),
+    Color("Copper", "#B87333", "#4a2f15", 10.0), Color("Natural", "#8B4513", "#4d260a", 15.0)
+]
+
+def get_palette(water_color_name, bottom_name):
+    return {
+        "water": {'Clear': '#d4f1f9', 'Stained': '#e0d8c6', 'Algae': '#d9ead3'}.get(water_color_name, '#d4f1f9'),
+        "bottom": {'Sand': '#c2b280', 'Mud': '#594a41', 'Weedbed': '#3b5323'}.get(bottom_name, '#c2b280'),
+        "land": "#28a745", "target": "limegreen"
     }
+
+def recommend_colors(clarity, light, depth, bottom):
+    scores = {c.name: 0 for c in COLOR_PALETTE}
     
-    # 1. Score based on Clarity
-    if clarity == "Clear":
-        scores["Silver"] += 3
-        scores["Natural"] += 2
-        scores["Pink/Red"] += 1 # Good for shallow
-    elif clarity == "Stained":
-        scores["Gold"] += 3
-        scores["Chartreuse"] += 2
-        scores["Copper"] += 1
-    else: # Turbid
-        scores["Chartreuse"] += 3
-        scores["White"] += 2
-        scores["Black"] += 2
-
-    # 2. Score based on Light
-    if light == "Bright":
-        scores["Silver"] += 2
-        scores["Gold"] += 1
-    elif light == "Overcast":
-        scores["Gold"] += 2
-        scores["Chartreuse"] += 2
-        scores["White"] += 1
-    else: # Dusk/Dawn
-        scores["Chartreuse"] += 3
-        scores["Black"] += 3
-        scores["White"] += 2
-
-    # 3. Score/Penalize based on Depth
+    if clarity == "Clear": scores["Silver"] += 3; scores["Natural"] += 2; scores["Pink"] += 1
+    elif clarity == "Stained": scores["Gold"] += 3; scores["Chartreuse"] += 2; scores["Copper"] += 1
+    else: scores["Chartreuse"] += 3; scores["White"] += 2; scores["Black"] += 2
+        
+    if light == "Bright": scores["Silver"] += 2; scores["Gold"] += 1
+    elif light == "Overcast": scores["Gold"] += 2; scores["Chartreuse"] += 2; scores["White"] += 1
+    else: scores["Chartreuse"] += 3; scores["Black"] += 3; scores["White"] += 2
+        
     warnings = []
-    if depth > 7.5: # Deepest
-        scores["Blue"] += 3
-        scores["Green/Olive"] += 2
-        scores["Chartreuse"] += 1
-        scores["Red"] = -10; scores["Orange"] = -10; scores["Pink/Red"] = -10
-        if "Red" not in warnings: warnings.append("Red")
-    elif depth > 3.5: # Mid-Deep
-        scores["Blue"] += 2
-        scores["Green/Olive"] += 2
-        scores["Chartreuse"] += 2
-        scores["Red"] = -10; scores["Orange"] = -10; scores["Pink/Red"] = -10
-        if "Red" not in warnings: warnings.append("Red")
-    elif depth > 1.5: # Mid-Shallow
-        scores["Gold"] += 1
-        scores["Silver"] += 1
-        scores["Pink/Red"] = -5 # Fading
-    else: # Shallow
-        scores["Pink/Red"] += 2
-        scores["Orange"] += 1
-        scores["Copper"] += 1
-
-    # Sort by score
-    sorted_colors = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    for color_obj in COLOR_PALETTE:
+        if depth > color_obj.max_depth_m:
+            scores[color_obj.name] -= 10
+            if color_obj.name not in warnings: warnings.append(color_obj.name)
     
-    # Build recommendations with reasons
-    recs = []
-    for color, score in sorted_colors:
-        if score > 0:
-            reason = "High contrast" if color in ["Black", "White"] else "High visibility"
-            if clarity == "Clear" and color in ["Natural", "Silver"]: reason = "Natural imitation"
-            if light == "Overcast" and color == "Gold": reason = "Bright in low light"
-            if light == "Dusk/Dawn" and color == "Chartreuse": reason = "Fluorescent advantage"
-            if depth > 3.5 and color == "Blue": reason = "Deep water penetration"
-            
-            recs.append((color, reason))
-        if len(recs) >= 3:
-            break
-            
-    return recs, warnings
+    if bottom in ["Mud", "Weedbed"]:
+        scores["White"] += 2; scores["Chartreuse"] += 2; scores["Silver"] += 1
+    else: scores["Black"] += 3; scores["Copper"] += 1
+
+    return sorted(scores.items(), key=lambda item: item[1], reverse=True), warnings
+
+def update_color_previews(depth, clarity, all_scores):
+    preview_container = document.getElementById("color-preview-container")
+    html = "<b>Color Previews at Depth</b>"
+    score_map = dict(all_scores)
+    
+    for color_obj in sorted(COLOR_PALETTE, key=lambda c: score_map.get(c.name, 0), reverse=True):
+        perceived_hex = color_obj.get_perceived_hex(depth, clarity)
+        score = score_map.get(color_obj.name, 0)
+        html += f'''
+            <div class="color-swatch">
+                <div class="swatch-pair">
+                    <div class="swatch" style="background-color:{color_obj.surface_hex};"></div>
+                    <div class="swatch" style="background-color:{perceived_hex};"></div>
+                </div>
+                {color_obj.name} (Score: {score})
+            </div>
+        '''
+    preview_container.innerHTML = html
 
 def run_auto_tune_handler(*args):
     try:
@@ -795,13 +851,14 @@ def debounce_update_plot(e=None):
 # --- BINDING HELPERS ---
 update_proxy = create_proxy(update_plot)
 auto_proxy = create_proxy(run_auto_tune_handler)
+debounce_proxy = create_proxy(debounce_update_plot)
 
 def bind_listeners():
     document.getElementById("btn-auto").addEventListener("click", auto_proxy)
     document.getElementById("btn-update").addEventListener("click", update_proxy)
     
     # V49 RESIZE FIX: Add listener for window resize
-    window.addEventListener('resize', create_proxy(debounce_update_plot))
+    window.addEventListener('resize', debounce_proxy)
 
     # Clone cheat sheet container for sticky header
     original_container = document.getElementById("cheat-sheet-container")
@@ -829,14 +886,18 @@ def bind_listeners():
         "s_rod_s", "i_rod_s",
         "s_rod_e", "i_rod_e",
         "w_rod_dyn",
-        "w_clarity", "w_light"
+        "w_clarity", "w_light", "w_water_color", "w_bottom"
     ]
     
     for id in input_ids:
         el = document.getElementById(id)
         if el:
-            el.addEventListener("change", update_proxy)
-            if el.type == "range": el.addEventListener("input", update_proxy)
+            # Use debounce for sliders to avoid choppiness
+            if el.type == "range":
+                el.addEventListener("input", debounce_proxy)
+                el.addEventListener("change", update_proxy) # Update once on release
+            else:
+                el.addEventListener("change", update_proxy)
 
 bind_listeners()
 setup_ui_listeners() # V48 UI-REWORK: Call the new UI setup
