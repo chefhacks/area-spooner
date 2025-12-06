@@ -191,6 +191,7 @@
                             <option value="Generic Standard">Generic Standard</option>
                             <option value="Rodio Craft NOA">Rodio Craft NOA</option>
                             <option value="Forest MIU">Forest MIU</option>
+                            <option value="Forest Factor">Forest Factor</option>
                             <option value="Jackall Tearo">Jackall Tearo</option>
                             <option value="Rodio Craft Jeckyll">Rodio Craft Jeckyll</option>
                             <option value="Generic Wide (High Lift)">Generic Wide</option>
@@ -380,8 +381,9 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
     }
     leader_props = {"Nylon": 0.05, "Fluorocarbon": -0.05} # Leader AoA effect
     shape_map = {
-        "Rodio Craft NOA":     {"Cl": 1.5, "Stall": 18, "SinkFactor": 0.7, "AoA_Sens": 1.8},
+        "Rodio Craft NOA":     {"Cl": 1.6, "Stall": 15, "SinkFactor": 0.8, "AoA_Sens": 0.6},
         "Forest MIU":          {"Cl": 1.0, "Stall": 28, "SinkFactor": 1.0, "AoA_Sens": 1.0},
+        "Forest Factor":       {"Cl": 1.2, "Stall": 22, "SinkFactor": 0.85, "AoA_Sens": 0.9},
         "Jackall Tearo":       {"Cl": 1.1, "Stall": 25, "SinkFactor": 0.9, "AoA_Sens": 1.1},
         "Rodio Craft Jeckyll": {"Cl": 0.6, "Stall": 22, "SinkFactor": 1.2, "AoA_Sens": 0.8},
         "Generic Wide (High Lift)":    {"Cl": 1.4, "Stall": 15, "SinkFactor": 0.6, "AoA_Sens": 1.8},
