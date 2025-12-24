@@ -3,8 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Trout Area Simulator - Enhanced v2.0</title>
+    <title>Trout Area Simulator - Enhanced v2.1</title>
     <!--
+    V2.1 UPDATE: PAUSE-AND-DROP RETRIEVES
+    - Configurable pause-and-drop technique (count, duration, location)
+    - Free-fall physics during pauses (realistic sink modeling)
+    - Trigger effect: 100% flutter quality spike after pause resume
+    - Optimizer tests pause configurations (4x more combinations)
+    - Visual pause markers on trajectory graph
+    - Save/load pause settings in pattern library
+
     V2.0 MAJOR UPGRADE:
     - Advanced physics: realistic buoyancy, stall behavior, flutter modeling
     - Enhanced optimizer: 10x+ more combinations tested
@@ -281,7 +289,7 @@
                         </div>
                     </div>
                     <div style="margin: 15px 0; font-size:0.9rem;">
-                        <input type="checkbox" id="w_rod_dyn" style="width:20px; height:20px; vertical-align:middle;"> 
+                        <input type="checkbox" id="w_rod_dyn" style="width:20px; height:20px; vertical-align:middle;">
                         <label style="display:inline; vertical-align:middle;">Dynamic Rod Move?</label>
                     </div>
                     <div class="control-group">
@@ -310,6 +318,34 @@
                         <div class="input-row">
                             <input type="range" id="s_trig" min="0" max="40" step="1" value="15" oninput="i_trig.value=this.value">
                             <input type="number" id="i_trig" value="15" step="1" oninput="s_trig.value=this.value">
+                        </div>
+                    </div>
+
+                    <hr style="margin: 20px 0; border: 0; border-top: 2px solid #e0e0e0;">
+                    <div style="margin: 15px 0; font-size:0.9rem; background: #fff3cd; padding: 8px; border-radius: 4px;">
+                        <input type="checkbox" id="w_pause_enable" style="width:20px; height:20px; vertical-align:middle;">
+                        <label style="display:inline; vertical-align:middle; font-weight:bold;">Enable Pause-and-Drop</label>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Pause Duration (sec)</label>
+                        <div class="input-row">
+                            <input type="range" id="s_pause_dur" min="0.5" max="3.0" step="0.5" value="1.0" oninput="i_pause_dur.value=this.value">
+                            <input type="number" id="i_pause_dur" value="1.0" step="0.5" oninput="s_pause_dur.value=this.value">
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>Number of Pauses</label>
+                        <div class="input-row">
+                            <input type="range" id="s_pause_count" min="1" max="3" step="1" value="1" oninput="i_pause_count.value=this.value">
+                            <input type="number" id="i_pause_count" value="1" step="1" oninput="s_pause_count.value=this.value">
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>First Pause at (m)</label>
+                        <div class="input-row">
+                            <input type="range" id="s_pause_dist" min="5" max="35" step="1" value="15" oninput="i_pause_dist.value=this.value">
+                            <input type="number" id="i_pause_dist" value="15" step="1" oninput="s_pause_dist.value=this.value">
                         </div>
                     </div>
                 </div>
@@ -397,7 +433,8 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
                            rod_start, rod_end, rod_dynamic, rod_move_dist,
                            speed_start, speed_end, decel_dist,
                            weight, shape_profile,
-                           steps=150, bottom_limit=-3.0):
+                           steps=150, bottom_limit=-3.0,
+                           pause_enabled=False, pause_duration=1.0, pause_count=1, pause_start_dist=15.0):
 
     global _physics_cache, _cache_hits, _cache_misses
 
@@ -406,7 +443,8 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
         round(dist, 1), round(actual_start_depth, 1), line, round(diameter_mm, 2), leader,
         round(rod_start, 1), round(rod_end, 1), rod_dynamic, round(rod_move_dist, 1),
         round(speed_start, 0), round(speed_end, 0), round(decel_dist, 1),
-        round(weight, 1), shape_profile, steps, round(bottom_limit, 1)
+        round(weight, 1), shape_profile, steps, round(bottom_limit, 1),
+        pause_enabled, round(pause_duration, 1), pause_count, round(pause_start_dist, 1)
     )
 
     # Check cache
@@ -465,9 +503,23 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
     spoon_angles = []
     is_stalled = []
     flutter_quality = []  # Track flutter/wobble quality
+    pause_points = []  # Track pause locations for visualization
     initial_geometry = {}
 
     current_depth = -abs(actual_start_depth)
+
+    # Calculate pause points if enabled
+    pause_distances = []
+    pause_active_until_step = {}  # Maps step index to when pause ends
+
+    if pause_enabled and pause_count > 0:
+        # Distribute pauses evenly throughout the retrieve
+        if pause_count == 1:
+            pause_distances = [pause_start_dist]
+        else:
+            # Space multiple pauses evenly
+            spacing = (pause_start_dist - 5) / max(1, pause_count - 1)
+            pause_distances = [pause_start_dist - (i * spacing) for i in range(pause_count)]
 
     # Enhanced lure physics
     lure_volume = weight * LURE_PROPERTIES['weight_to_volume']  # cm³
@@ -481,7 +533,25 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
     # Proper lure buoyancy force (constant)
     lure_buoyancy_force = PHYSICS['buoyancy_scale'] * lure_volume * (1.0 - LURE_PROPERTIES['lure_density_ratio'])
 
+    # Track time elapsed during pauses (for physics calculation)
+    pause_time_tracker = 0.0
+
     for i, d in enumerate(x):
+        # Check if we're in a pause
+        in_pause = False
+        if pause_enabled:
+            # Check if current distance triggers a new pause
+            for pause_dist in pause_distances:
+                if abs(d - pause_dist) < (dx / 2) and i not in pause_active_until_step:
+                    # Start pause - calculate how many steps it lasts
+                    # Each step represents dx meters traveled at current speed
+                    # During pause, we simulate free-fall for pause_duration seconds
+                    pause_active_until_step[i] = i + int(pause_duration / 0.05)  # ~0.05s per step during pause
+                    pause_points.append((d, current_depth))  # Mark pause location
+
+            # Check if currently paused
+            if any(start_step <= i < end_step for start_step, end_step in pause_active_until_step.items()):
+                in_pause = True
         if current_depth <= bottom_limit:
             remaining = steps - i
             y.extend([bottom_limit] * remaining)
@@ -514,75 +584,118 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
         if i == 0:
             initial_geometry = {'rod_h': r_h, 'spoon_x': d, 'spoon_y': current_depth, 'entry_x': entry_dist_x}
 
-        if d > decel_dist: v_cms = speed_start
+        # PAUSE-AND-DROP LOGIC
+        if in_pause:
+            v_cms = 0  # No reeling during pause
+            speeds.append(v_cms)
+            dt = 0.05  # Fixed timestep during pause (50ms)
         else:
-            if decel_dist == 0: ratio = 0
-            else: ratio = d / decel_dist
-            v_cms = speed_end + ((speed_start - speed_end) * ratio)
-        
-        speeds.append(v_cms)
-        v = max(0.01, v_cms / 100.0)
-        dt = dx / v
+            # Normal speed calculation
+            if d > decel_dist: v_cms = speed_start
+            else:
+                if decel_dist == 0: ratio = 0
+                else: ratio = d / decel_dist
+                v_cms = speed_end + ((speed_start - speed_end) * ratio)
+
+            speeds.append(v_cms)
+            v = max(0.01, v_cms / 100.0)
+            dt = dx / v
 
         dy = r_h - current_depth
         geo_angle = np.arctan(dy / d) if d > 0.01 else 0
         angle_degrees = np.degrees(geo_angle)
         spoon_angles.append(angle_degrees)
 
-        # Realistic stall behavior with hysteresis
-        stall_speed = stall_threshold * 0.7  # Speed below which stall is guaranteed
-        recovery_speed = stall_threshold * 1.2  # Speed needed to recover from stall
-
-        if v_cms < stall_speed or abs(angle_degrees) > 45:
-            # Complete stall - catastrophic loss of lift
+        # PAUSE-AND-DROP FLUTTER LOGIC
+        if in_pause:
+            # During pause: no flutter, complete stall
             is_stalled.append(True)
-            cl_effective = spoon_cl * 0.05  # 95% lift loss
+            cl_effective = 0.0  # No lift during pause
             flutter_q = 0.0
-        elif v_cms < stall_threshold:
-            # Partial stall - reduced lift, poor action
-            is_stalled.append(True)
-            stall_ratio = (stall_threshold - v_cms) / (stall_threshold - stall_speed)
-            cl_effective = spoon_cl * (0.3 + 0.6 * (1 - stall_ratio))
-            flutter_q = 0.2 * (1 - stall_ratio)
         else:
-            # Good flow - calculate flutter quality
-            is_stalled.append(False)
-            cl_effective = spoon_cl
+            # Check if we just resumed from pause (trigger effect!)
+            just_resumed = False
+            if i > 0 and pause_enabled:
+                # Check if previous step was in pause
+                prev_in_pause = any(start_step <= (i-1) < end_step for start_step, end_step in pause_active_until_step.items())
+                if prev_in_pause and not in_pause:
+                    just_resumed = True
 
-            # Flutter quality depends on speed range and lure characteristics
-            optimal_speed = stall_threshold * 2.0
-            speed_factor = min(1.0, v_cms / optimal_speed)
+            # Realistic stall behavior with hysteresis
+            stall_speed = stall_threshold * 0.7  # Speed below which stall is guaranteed
+            recovery_speed = stall_threshold * 1.2  # Speed needed to recover from stall
 
-            # Wobble induced by vortex shedding
-            flutter_phase = (i / steps) * flutter_freq * 2 * np.pi
-            wobble_contribution = np.sin(flutter_phase) * wobble_amp * speed_factor
-            flutter_q = max(0.0, min(1.0, speed_factor * wobble_amp))
+            if v_cms < stall_speed or abs(angle_degrees) > 45:
+                # Complete stall - catastrophic loss of lift
+                is_stalled.append(True)
+                cl_effective = spoon_cl * 0.05  # 95% lift loss
+                flutter_q = 0.0
+            elif v_cms < stall_threshold:
+                # Partial stall - reduced lift, poor action
+                is_stalled.append(True)
+                stall_ratio = (stall_threshold - v_cms) / (stall_threshold - stall_speed)
+                cl_effective = spoon_cl * (0.3 + 0.6 * (1 - stall_ratio))
+                flutter_q = 0.2 * (1 - stall_ratio)
+            else:
+                # Good flow - calculate flutter quality
+                is_stalled.append(False)
+                cl_effective = spoon_cl
+
+                # Flutter quality depends on speed range and lure characteristics
+                optimal_speed = stall_threshold * 2.0
+                speed_factor = min(1.0, v_cms / optimal_speed)
+
+                # Wobble induced by vortex shedding
+                flutter_phase = (i / steps) * flutter_freq * 2 * np.pi
+                wobble_contribution = np.sin(flutter_phase) * wobble_amp * speed_factor
+                flutter_q = max(0.0, min(1.0, speed_factor * wobble_amp))
+
+                # TRIGGER EFFECT: Just resumed from pause = maximum flutter!
+                if just_resumed:
+                    flutter_q = 1.0  # 100% flutter quality spike
 
         flutter_quality.append(flutter_q)
         
-        leader_aoa_mod = leader_props[leader]
-        
-        aoa_factor = 1.0 + (np.sin(geo_angle) * aoa_sensitivity) + leader_aoa_mod
-        belly_impact = props['belly'] * (d / 25.0) * PHYSICS['belly_tuning'] * ratio_in_water
-        effective_angle_sin = np.sin(geo_angle) + belly_impact
-        
-        delta_rod = (v * dt) * effective_angle_sin
-        delta_grav = -effective_sink_rate * dt
+        # PHYSICS FORCES
+        if in_pause:
+            # FREE-FALL PHYSICS during pause
+            delta_rod = 0.0  # No horizontal movement
+            delta_lift = 0.0  # No lift (no speed)
+            delta_line_drag = 0.0  # Minimal line drag (slack line)
+            delta_line_buoy = 0.0  # Line not pulling
+            delta_vortex = 0.0  # No vortex shedding
 
-        delta_lift = PHYSICS['lift_scale'] * (v**2) * cl_effective * area_lift_scaler * aoa_factor * dt
-        delta_line_drag = PHYSICS['drag_scale'] * props['cd'] * (v**2) * dia_scale_drag * (d/25.0) * dt * ratio_in_water
+            # Only gravity and lure buoyancy act during pause
+            delta_grav = -effective_sink_rate * dt * 1.2  # Slightly faster sink (no resistance)
+            delta_lure_buoy = lure_buoyancy_force * dt
 
-        # Proper line buoyancy (acts on submerged line)
-        delta_line_buoy = PHYSICS['buoyancy_scale'] * (1.0 - props['sg']) * dia_scale_vol * (d/25.0) * dt * ratio_in_water
+            wind_lift = 0.0  # No wind effect during pause
+        else:
+            # NORMAL RETRIEVE PHYSICS
+            leader_aoa_mod = leader_props[leader]
 
-        # Proper lure buoyancy (constant, negative for sinking lures)
-        delta_lure_buoy = lure_buoyancy_force * dt * ratio_in_water
+            aoa_factor = 1.0 + (np.sin(geo_angle) * aoa_sensitivity) + leader_aoa_mod
+            belly_impact = props['belly'] * (d / 25.0) * PHYSICS['belly_tuning'] * ratio_in_water
+            effective_angle_sin = np.sin(geo_angle) + belly_impact
 
-        # Vortex shedding drag (reduces depth oscillation, adds realism)
-        delta_vortex = PHYSICS['vortex_scale'] * (v**2) * drag_coeff * flutter_q * dt * ratio_in_water
+            v = v_cms / 100.0  # Convert cm/s to m/s
+            delta_rod = (v * dt) * effective_angle_sin
+            delta_grav = -effective_sink_rate * dt
 
-        wind_factor = {'Calm': 0.0, 'Breeze': 0.005, 'Strong': 0.02}
-        wind_lift = wind_factor.get(get_val("w_wind"), 0.0) * (d / dist) * ratio_air * dt
+            delta_lift = PHYSICS['lift_scale'] * (v**2) * cl_effective * area_lift_scaler * aoa_factor * dt
+            delta_line_drag = PHYSICS['drag_scale'] * props['cd'] * (v**2) * dia_scale_drag * (d/25.0) * dt * ratio_in_water
+
+            # Proper line buoyancy (acts on submerged line)
+            delta_line_buoy = PHYSICS['buoyancy_scale'] * (1.0 - props['sg']) * dia_scale_vol * (d/25.0) * dt * ratio_in_water
+
+            # Proper lure buoyancy (constant, negative for sinking lures)
+            delta_lure_buoy = lure_buoyancy_force * dt * ratio_in_water
+
+            # Vortex shedding drag (reduces depth oscillation, adds realism)
+            delta_vortex = PHYSICS['vortex_scale'] * (v**2) * drag_coeff * flutter_q * dt * ratio_in_water
+
+            wind_factor = {'Calm': 0.0, 'Breeze': 0.005, 'Strong': 0.02}
+            wind_lift = wind_factor.get(get_val("w_wind"), 0.0) * (d / dist) * ratio_air * dt
 
         current_depth += (delta_rod + delta_grav + delta_lift + delta_line_drag +
                          delta_line_buoy + delta_lure_buoy + delta_vortex + wind_lift)
@@ -590,7 +703,7 @@ def calculate_physics_data(dist, actual_start_depth, line, diameter_mm, leader,
         y.append(current_depth)
 
     # Cache result before returning
-    result = (x, y, speeds, props['color'], initial_geometry, rod_heights, spoon_angles, flutter_quality)
+    result = (x, y, speeds, props['color'], initial_geometry, rod_heights, spoon_angles, flutter_quality, pause_points)
     _physics_cache[cache_key] = result
 
     return result
@@ -686,6 +799,14 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
     # EXPANDED TRIGGER POINTS (6 options instead of 2)
     trigger_percentages = [0.3, 0.5, 0.6, 0.7, 0.8, 0.9]
 
+    # PAUSE-AND-DROP OPTIONS
+    pause_options = [
+        (False, 1.0, 1, dist * 0.5),  # No pause
+        (True, 1.0, 1, dist * 0.6),   # 1 pause, 1 second, mid-retrieve
+        (True, 1.5, 1, dist * 0.7),   # 1 pause, 1.5 seconds, late retrieve
+        (True, 1.0, 2, dist * 0.7),   # 2 pauses
+    ]
+
     wind = get_val("w_wind")
 
     # Test all combinations
@@ -695,23 +816,28 @@ def optimize_technique(dist, target_depth, weight, shape, diameter, leader, line
                 for trig_pct in trigger_percentages:
                     trigger_dist = dist * trig_pct
 
-                    x, y, speeds, _, _, _, _, flutter_q = calculate_physics_data(
-                        dist, s_depth, line, diameter, leader, r_s, r_e, r_dyn, trigger_dist,
-                        spd_s, spd_e, trigger_dist, weight, shape,
-                        steps=30, bottom_limit=pond_bottom
-                    )
+                    for pause_en, pause_dur, pause_cnt, pause_start in pause_options:
+                        x, y, speeds, _, _, _, _, flutter_q, _ = calculate_physics_data(
+                            dist, s_depth, line, diameter, leader, r_s, r_e, r_dyn, trigger_dist,
+                            spd_s, spd_e, trigger_dist, weight, shape,
+                            steps=30, bottom_limit=pond_bottom,
+                            pause_enabled=pause_en, pause_duration=pause_dur,
+                            pause_count=pause_cnt, pause_start_dist=pause_start
+                        )
 
-                    score = calculate_advanced_score(y, speeds, flutter_q, target_depth,
-                                                     pond_bottom, spd_s, r_s, wind)
+                        score = calculate_advanced_score(y, speeds, flutter_q, target_depth,
+                                                         pond_bottom, spd_s, r_s, wind)
 
-                    if score > best_score:
-                        best_score = score
-                        best_params = {
-                            'spd_s': spd_s, 'spd_e': spd_e,
-                            'rod_s': r_s, 'rod_e': r_e, 'rod_dyn': r_dyn,
-                            'start_depth': s_depth, 'trigger_dist': trigger_dist,
-                            'score': score
-                        }
+                        if score > best_score:
+                            best_score = score
+                            best_params = {
+                                'spd_s': spd_s, 'spd_e': spd_e,
+                                'rod_s': r_s, 'rod_e': r_e, 'rod_dyn': r_dyn,
+                                'start_depth': s_depth, 'trigger_dist': trigger_dist,
+                                'pause_enabled': pause_en, 'pause_duration': pause_dur,
+                                'pause_count': pause_cnt, 'pause_dist': pause_start,
+                                'score': score
+                            }
 
     return best_params
 
@@ -748,9 +874,17 @@ def update_plot(event=None):
         bottom_name = get_val("w_bottom")
         palette = get_palette(water_color_name, bottom_name)
 
-        x, y, speeds, color, init_geo, rod_heights, angles, flutter_q = calculate_physics_data(
+        # Get pause parameters
+        pause_enabled = get_val("w_pause_enable")
+        pause_duration = get_val("s_pause_dur")
+        pause_count = int(get_val("s_pause_count"))
+        pause_dist = get_val("s_pause_dist")
+
+        x, y, speeds, color, init_geo, rod_heights, angles, flutter_q, pause_pts = calculate_physics_data(
             dist, start_depth, line, dia, leader, rod_s, rod_e, rod_dyn, trigger,
-            spd_s, spd_e, trigger, weight, shape, steps=150, bottom_limit=p_bot
+            spd_s, spd_e, trigger, weight, shape, steps=150, bottom_limit=p_bot,
+            pause_enabled=pause_enabled, pause_duration=pause_duration,
+            pause_count=pause_count, pause_start_dist=pause_dist
         )
 
         is_mobile = window.innerWidth < 900
@@ -773,6 +907,12 @@ def update_plot(event=None):
         
         ax1.plot(x, y, color=color, linewidth=3, label=line)
         ax1.axvline(trigger, color='purple', linestyle='--', alpha=0.5)
+
+        # Mark pause points
+        if pause_enabled and len(pause_pts) > 0:
+            pause_x = [p[0] for p in pause_pts]
+            pause_y = [p[1] for p in pause_pts]
+            ax1.scatter(pause_x, pause_y, color='red', s=150, marker='X', zorder=10, label='Pause', edgecolors='black', linewidths=2)
         
         rod_wrist_x = -1.2; rod_wrist_y = 1.0
         ax1.add_patch(patches.Rectangle((-3, -0.5), 3, 0.5, color=palette['land'], alpha=0.6)) # Land
@@ -945,6 +1085,14 @@ def run_auto_tune_handler(*args):
             set_val("s_rod_s", res['rod_s']); set_val("s_rod_e", res['rod_e'])
             set_val("w_rod_dyn", res['rod_dyn']); set_val("s_start_d", round(res['start_depth'], 1))
             set_val("s_trig", int(res['trigger_dist']))
+
+            # Apply pause settings if found
+            if 'pause_enabled' in res:
+                set_val("w_pause_enable", res['pause_enabled'])
+                set_val("s_pause_dur", res.get('pause_duration', 1.0))
+                set_val("s_pause_count", int(res.get('pause_count', 1)))
+                set_val("s_pause_dist", int(res.get('pause_dist', 15)))
+
             update_plot_handler(None)
         else:
             document.getElementById("cheat-sheet").innerHTML = "<b>❌ SETUP IMPOSSIBLE. CHANGE GEAR.</b>"
@@ -1011,7 +1159,11 @@ def save_pattern_handler(*args):
             'rod_e': get_val("s_rod_e"),
             'rod_dyn': get_val("w_rod_dyn"),
             'start_d': get_val("s_start_d"),
-            'trig': get_val("s_trig")
+            'trig': get_val("s_trig"),
+            'pause_enable': get_val("w_pause_enable"),
+            'pause_dur': get_val("s_pause_dur"),
+            'pause_count': get_val("s_pause_count"),
+            'pause_dist': get_val("s_pause_dist")
         }
 
         # Prompt for name
@@ -1095,6 +1247,10 @@ def load_pattern_handler(*args):
                 set_val("w_rod_dyn", p.get('rod_dyn', True))
                 set_val("s_start_d", p.get('start_d', 2.5))
                 set_val("s_trig", p.get('trig', 15))
+                set_val("w_pause_enable", p.get('pause_enable', False))
+                set_val("s_pause_dur", p.get('pause_dur', 1.0))
+                set_val("s_pause_count", p.get('pause_count', 1))
+                set_val("s_pause_dist", p.get('pause_dist', 15))
 
                 update_plot()
                 window.alert(f"✅ Loaded: {p.get('name', 'Unnamed')}")
@@ -1139,13 +1295,15 @@ def bind_listeners():
         sticky_container.appendChild(cloned_sheet)
 
     input_ids = [
-        "w_line", "w_leader", "w_shape", 
+        "w_line", "w_leader", "w_shape",
         "s_weight", "i_weight", "s_dia", "i_dia", "s_reel", "i_reel",
         "s_dist", "i_dist", "s_target", "i_target", "s_pond", "i_pond",
         "s_start_d", "i_start_d", "s_trig", "i_trig",
         "s_spd_s", "i_spd_s", "s_spd_e", "i_spd_e",
         "s_rod_s", "i_rod_s", "s_rod_e", "i_rod_e", "w_rod_dyn",
-        "w_clarity", "w_light", "w_water_color", "w_bottom", "w_wind"
+        "w_clarity", "w_light", "w_water_color", "w_bottom", "w_wind",
+        "w_pause_enable", "s_pause_dur", "i_pause_dur", "s_pause_count", "i_pause_count",
+        "s_pause_dist", "i_pause_dist"
     ]
     
     for id in input_ids:
